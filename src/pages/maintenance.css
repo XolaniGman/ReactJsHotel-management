@@ -1,0 +1,354 @@
+.maint-dash-bg {
+  background: #fbf7f0;
+  min-height: calc(100vh - 78px);
+}
+
+.maint-dash {
+  width: min(100% - 44px, 1120px);
+  margin: 0 auto;
+  padding: 2rem 0 4rem;
+}
+
+.maint-dash .maint-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.maint-dash .maint-kicker {
+  color: #775a19;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 0.68rem;
+  font-weight: 900;
+  margin-bottom: 0.35rem;
+}
+
+.maint-dash .maint-title {
+  font-family: 'Noto Serif', serif;
+  font-weight: 700;
+  color: #172033;
+  margin: 0;
+}
+
+.maint-dash .btn-log {
+  background: #775a19;
+  color: #fff;
+  border: 0;
+  padding: 0.8rem 1.2rem;
+  font-weight: 900;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 10px;
+}
+
+.maint-dash .btn-log:hover {
+  background: #5f4614;
+  color: #fff;
+}
+
+.maint-dash .metric-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.maint-dash .metric-card {
+  min-height: 105px;
+  padding: 1rem;
+  color: #fff;
+  background-size: cover;
+  background-position: center;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 16px 38px rgba(18, 26, 42, 0.12);
+}
+
+.maint-dash .metric-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(0, 0, 0, 0.74), rgba(0, 0, 0, 0.28));
+}
+
+.maint-dash .metric-content {
+  position: relative;
+  z-index: 1;
+}
+
+.maint-dash .metric-icon {
+  color: #f7d690;
+  margin-bottom: 0.65rem;
+}
+
+.maint-dash .metric-number {
+  display: block;
+  font-size: 1.85rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.maint-dash .metric-label {
+  font-size: 0.78rem;
+  color: rgba(255, 255, 255, 0.82);
+  font-weight: 800;
+}
+
+.maint-dash .dashboard-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) 360px;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.maint-dash .panel-card {
+  background: #fff;
+  border: 1px solid #e7ddcd;
+  box-shadow: 0 18px 45px rgba(18, 26, 42, 0.08);
+  overflow: hidden;
+}
+
+.maint-dash .panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 1.2rem;
+  border-bottom: 1px solid #e7ddcd;
+  background: #fffdf9;
+}
+
+.maint-dash .panel-header h2 {
+  font-family: 'Noto Serif', serif;
+  font-size: 1.15rem;
+  font-weight: 700;
+  margin: 0;
+  color: #172033;
+}
+
+.maint-dash .panel-actions {
+  display: flex;
+  gap: 0.7rem;
+  color: #775a19;
+}
+
+.maint-dash .panel-link {
+  color: #775a19;
+  font-weight: 900;
+  font-size: 0.82rem;
+  text-decoration: none;
+}
+
+.maint-dash .panel-link:hover {
+  color: #5f4614;
+}
+
+.maint-dash .task-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.maint-dash .task-table th {
+  background: #fbf4ea;
+  color: #775a19;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: 900;
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid #e7ddcd;
+  text-align: left;
+}
+
+.maint-dash .task-table td {
+  padding: 1rem;
+  border-bottom: 1px solid #eee6da;
+  vertical-align: middle;
+}
+
+.maint-dash .task-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.maint-dash .task-name {
+  font-weight: 900;
+  color: #172033;
+  margin-bottom: 0.2rem;
+}
+
+.maint-dash .task-sub {
+  color: #6d7483;
+  font-size: 0.78rem;
+}
+
+.maint-dash .priority-pill,
+.maint-dash .status-pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.38rem 0.7rem;
+  font-size: 0.68rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.maint-dash .priority-high,
+.maint-dash .priority-urgent {
+  background: #fff1f1;
+  color: #a33a2d;
+}
+
+.maint-dash .priority-medium {
+  background: #f4ecdf;
+  color: #775a19;
+}
+
+.maint-dash .priority-low {
+  background: #edf4ff;
+  color: #355f8c;
+}
+
+.maint-dash .status-open {
+  background: #f3eadc;
+  color: #775a19;
+}
+
+.maint-dash .status-progress {
+  background: #edf4ff;
+  color: #355f8c;
+}
+
+.maint-dash .status-hold {
+  background: #fff6db;
+  color: #8a640e;
+}
+
+.maint-dash .status-complete {
+  background: #edf8f1;
+  color: #2f7d4f;
+}
+
+.maint-dash .assignee {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 800;
+  font-size: 0.82rem;
+}
+
+.maint-dash .avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #172033;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  font-weight: 900;
+}
+
+.maint-dash .view-all {
+  display: block;
+  text-align: center;
+  background: #fbf4ea;
+  color: #775a19;
+  text-decoration: none;
+  font-weight: 900;
+  padding: 1rem;
+  border-top: 1px solid #e7ddcd;
+}
+
+.maint-dash .view-all:hover {
+  color: #5f4614;
+}
+
+.maint-dash .bottom-grid {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 1.5rem;
+  margin-top: 1.5rem;
+}
+
+.maint-dash .inventory-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 1.2rem;
+  border-bottom: 1px solid #eee6da;
+}
+
+.maint-dash .inventory-row:last-child {
+  border-bottom: 0;
+}
+
+.maint-dash .inventory-name {
+  font-weight: 900;
+  color: #172033;
+}
+
+.maint-dash .inventory-sub {
+  color: #6d7483;
+  font-size: 0.8rem;
+}
+
+.maint-dash .stock-warning {
+  color: #a33a2d;
+  font-weight: 900;
+}
+
+.maint-dash .stock-ok {
+  color: #2f7d4f;
+  font-weight: 900;
+}
+
+.maint-dash .alert-card {
+  background: #2a241e;
+  color: #fff;
+  border: 0;
+  padding: 1.3rem;
+}
+
+.maint-dash .alert-card h2 {
+  color: #f7d690;
+}
+
+.maint-dash .alert-item {
+  border-left: 3px solid #775a19;
+  padding-left: 0.8rem;
+  margin-top: 1rem;
+}
+
+.maint-dash .alert-time {
+  color: #f7d690;
+  font-size: 0.7rem;
+  font-weight: 900;
+}
+
+.maint-dash .text-white-50 {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+@media (max-width: 991.98px) {
+  .maint-dash .metric-grid,
+  .maint-dash .dashboard-grid,
+  .maint-dash .bottom-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .maint-dash .panel-card {
+    overflow-x: auto;
+  }
+
+  .maint-dash .task-table {
+    min-width: 900px;
+  }
+}

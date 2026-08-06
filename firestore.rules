@@ -1,0 +1,162 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- Shared helpers ----------
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    function isStaff() {
+      return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'housekeeping', 'laundry', 'storekeeper', 'maintenance'];
+    }
+
+    function isOwnProfile() {
+      return isSignedIn() && request.auth.uid == resource.id;
+    }
+
+    // ---------- Users ----------
+    match /users/{uid} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.auth.uid == uid;
+      allow update, delete: if isOwnProfile() || isAdmin();
+    }
+
+    // ---------- Rooms (public catalogue; any user/kiosk may flip status during check-in) ----------
+    match /rooms/{id} {
+      allow read: if true;
+      allow update: if true;
+      allow create, delete: if isAdmin();
+    }
+
+    // ---------- Products & inventory (staff read, admin/staff write) ----------
+    match /products/{id} {
+      allow read: if true;
+      allow create, update, delete: if isStaff();
+    }
+
+    match /inventoryTransactions/{id} {
+      allow read: if isStaff();
+      allow create, update, delete: if isStaff();
+    }
+
+    match /roomInventory/{id} {
+      allow read: if isStaff();
+      allow create, update, delete: if isStaff();
+    }
+
+    // ---------- Reservations ----------
+    // Read is public so the self-service kiosk can verify a booking by reference without login.
+    // Update is public so the kiosk can mark a reservation CheckedIn; create requires sign-in.
+    match /reservations/{id} {
+      allow read: if true;
+      allow create: if isSignedIn();
+      allow update: if true;
+      allow delete: if isAdmin();
+    }
+
+    match /reservationAudits/{id} {
+      allow read, create: if isSignedIn();
+      allow update, delete: if isAdmin();
+    }
+
+    // ---------- Bills & payments ----------
+    match /bills/{id} {
+      allow read, create, update, delete: if isSignedIn();
+    }
+
+    match /payments/{id} {
+      allow read, create, update, delete: if isSignedIn();
+    }
+
+    // ---------- Check-ins ----------
+    // Kiosk flow is public: guests verify by booking reference without signing in.
+    match /checkins/{id} {
+      allow read, create, update, delete: if isSignedIn() || true;
+    }
+
+    // ---------- Guest services ----------
+    match /amenities/{id} {
+      allow read: if true;
+      allow create, update, delete: if isStaff();
+    }
+
+    match /amenityRequests/{id} {
+      allow read, create, update, delete: if isSignedIn();
+    }
+
+    match /laundryRequests/{id} {
+      allow read, create, update, delete: if isSignedIn();
+    }
+
+    match /housekeepingRequests/{id} {
+      allow read, create, update, delete: if isSignedIn();
+    }
+
+    match /maintenanceRequests/{id} {
+      allow read, create, update, delete: if isSignedIn();
+    }
+
+    match /lostReports/{id} {
+      allow read, create, update, delete: if isSignedIn();
+    }
+
+    match /foundReports/{id} {
+      allow read, create, update, delete: if isSignedIn();
+    }
+
+    match /roomInspections/{id} {
+      allow read, create, update, delete: if isStaff();
+    }
+
+    // ---------- Events ----------
+    match /events/{id} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /eventBookings/{id} {
+      allow read, create, update, delete: if isSignedIn();
+    }
+
+    // ---------- Restaurant ----------
+    match /menuItems/{id} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /tables/{id} {
+      allow read: if true;
+      allow update: if isSignedIn();
+      allow create, delete: if isStaff();
+    }
+
+    match /tableReservations/{id} {
+      allow read, create, update, delete: if isSignedIn();
+    }
+
+    match /restaurantOrders/{id} {
+      allow read, create: if isSignedIn();
+      allow update, delete: if isStaff();
+    }
+
+    match /chefs/{id} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /cleanerSchedules/{id} {
+      allow read: if isStaff();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /{document=**} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+  }
+}
