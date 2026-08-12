@@ -52,6 +52,7 @@ import AdminRestaurant from './pages/AdminRestaurant';
 import AdminRestaurantMenu from './pages/AdminRestaurantMenu';
 import AdminRestaurantTables from './pages/AdminRestaurantTables';
 import AdminRestaurantReports from './pages/AdminRestaurantReports';
+import RestaurantManagerDashboard from './pages/RestaurantManagerDashboard';
 
 const canAccessAdmin = (user) =>
   user?.role === 'admin' && isAdminAccount(user?.email);
@@ -78,13 +79,19 @@ function RequireRole({ roles = [], children }) {
   if (!roles.includes(user.role)) {
     return (
       <Navigate
-        to={canAccessAdmin(user) ? '/Admin/Dashboard' : '/Guest/Dashboard'}
+        to={
+          canAccessAdmin(user)
+            ? '/Admin/Dashboard'
+            : user?.role === 'restaurant'
+              ? '/Admin/Restaurant/Manager'
+              : '/Guest/Dashboard'
+        }
         replace
       />
     );
   }
 
-  if (roles.includes('admin') && !canAccessAdmin(user)) {
+  if (user?.role === 'admin' && !canAccessAdmin(user)) {
     return <Navigate to="/Guest/Dashboard" replace />;
   }
 
@@ -93,6 +100,7 @@ function RequireRole({ roles = [], children }) {
 
 const STAFF_ROLES = ['admin', 'housekeeping', 'laundry', 'storekeeper', 'maintenance', 'system'];
 const ADMIN_ROLES = ['admin', 'system'];
+const RESTAURANT_ROLES = ['restaurant', ...STAFF_ROLES];
 
 export default function App() {
   return (
@@ -156,10 +164,11 @@ export default function App() {
                   <Route path="/Admin/CheckIns" element={<RequireRole roles={ADMIN_ROLES}><AdminCheckIns /></RequireRole>} />
                   <Route path="/Admin/Payments" element={<RequireRole roles={ADMIN_ROLES}><AdminPayments /></RequireRole>} />
                   <Route path="/Admin/Amenities" element={<RequireRole roles={ADMIN_ROLES}><AdminAmenities /></RequireRole>} />
-                  <Route path="/Admin/Restaurant" element={<RequireRole roles={STAFF_ROLES}><AdminRestaurant /></RequireRole>} />
-                  <Route path="/Admin/Restaurant/Menu" element={<RequireRole roles={STAFF_ROLES}><AdminRestaurantMenu /></RequireRole>} />
-                  <Route path="/Admin/Restaurant/Tables" element={<RequireRole roles={STAFF_ROLES}><AdminRestaurantTables /></RequireRole>} />
-                  <Route path="/Admin/Restaurant/Reports" element={<RequireRole roles={STAFF_ROLES}><AdminRestaurantReports /></RequireRole>} />
+                  <Route path="/Admin/Restaurant/Manager" element={<RequireRole roles={RESTAURANT_ROLES}><RestaurantManagerDashboard /></RequireRole>} />
+                  <Route path="/Admin/Restaurant" element={<RequireRole roles={RESTAURANT_ROLES}><AdminRestaurant /></RequireRole>} />
+                  <Route path="/Admin/Restaurant/Menu" element={<RequireRole roles={RESTAURANT_ROLES}><AdminRestaurantMenu /></RequireRole>} />
+                  <Route path="/Admin/Restaurant/Tables" element={<RequireRole roles={RESTAURANT_ROLES}><AdminRestaurantTables /></RequireRole>} />
+                  <Route path="/Admin/Restaurant/Reports" element={<RequireRole roles={RESTAURANT_ROLES}><AdminRestaurantReports /></RequireRole>} />
                   <Route path="/Admin/Inventory" element={<RequireRole roles={ADMIN_ROLES}><AdminInventory /></RequireRole>} />
                   <Route path="/Admin/InventoryStaff" element={<RequireRole roles={ADMIN_ROLES}><AdminInventoryStaff /></RequireRole>} />
                   <Route path="/Admin/CleanerSchedules" element={<RequireRole roles={ADMIN_ROLES}><AdminCleanerSchedules /></RequireRole>} />

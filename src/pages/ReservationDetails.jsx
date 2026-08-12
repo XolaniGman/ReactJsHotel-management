@@ -8,8 +8,19 @@ import {
   listReservationAudits,
 } from '../services/reservationService';
 import { getBillByReservation } from '../services/billService';
+import { listOrders } from '../services/restaurantService';
 import { checkout } from '../services/checkinService';
 import { formatPrice, formatGuestDate, formatDateTime, nightsBetween, addDaysISO, todayISO } from '../lib/utils';
+
+const ORDER_STEPS = ['Queued', 'InPreparation', 'ReadyForCollection', 'Served'];
+const ORDER_STEP_LABELS = { Queued: 'Queued', InPreparation: 'In Preparation', ReadyForCollection: 'Ready', Served: 'Served' };
+
+const fmtElapsed = (from, now) => {
+  if (!from) return '—';
+  const mins = Math.floor((now - from) / 60000);
+  if (mins < 60) return `${mins} min`;
+  return `${Math.floor(mins / 60)}h ${mins % 60}m`;
+};
 
 export default function ReservationDetails() {
   const { id } = useParams();
@@ -17,6 +28,8 @@ export default function ReservationDetails() {
   const [res, setRes] = useState(null);
   const [bill, setBill] = useState(null);
   const [audits, setAudits] = useState([]);
+  const [restaurantOrders, setRestaurantOrders] = useState([]);
+  const [now, setNow] = useState(Date.now());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -35,12 +48,19 @@ export default function ReservationDetails() {
     if (data) {
       setBill(await getBillByReservation(data.id));
       setAudits(await listReservationAudits(data.id));
+      const orders = await listOrders();
+      setRestaurantOrders(orders.filter((o) => o.reservationId === data.id));
     }
     setLoading(false);
   };
 
   useEffect(() => {
     load();
+    const t = setInterval(() => {
+      setNow(Date.now());
+      load();
+    }, 30000);
+    return () => clearInterval(t);
   }, [id]);
 
   if (loading) return <p className="text-center text-muted py-5">Loading…</p>;
@@ -175,6 +195,61 @@ export default function ReservationDetails() {
         <div className="res-tile"><span className="res-label">Levy (1%)</span><div className="res-value">{formatPrice(res.levy)}</div></div>
         <div className="res-tile"><span className="res-label">Total</span><div className="res-value">{formatPrice(res.total)}</div></div>
       </div>
+
+      {restaurantOrders.length > 0 && (
+        <div className="res-recent">
+          <h2 className="res-recent-title"><i className="bi bi-egg-fried me-2" />Restaurant orders</h2>
+          {restaurantOrders.map((o) => {
+            const cancelled = o.status === 'Cancelled';
+            const stepIdx = ORDER_STEPS.indexOf(o.status);
+            return (
+              <div className="dash-panel mb-3" key={o.id}>
+                <div className="dash-row dash-row--simple" style={{ borderBottom: '1px solid rgba(231,221,205,0.7)', paddingBottom: '0.75rem' }}>
+                  <div>
+                    <div className="dash-row-title">{o.orderNo} · Table {o.tableNumber}</div>
+                    <div className="dash-row-meta">
+                      <span>{o.items.reduce((s, i) => s + (i.qty || 0), 0)} item(s) · {formatPrice(o.total)}</span>
+                      <span>Est. ~{o.estimateMinutes} min</span>
+                    </div>
+                  </div>
+                  <span className={`dash-status-pill ${cancelled ? 'muted' : stepIdx >= 3 ? 'success' : 'info'}`}>
+                    {o.status.replace(/([A-Z])/g, ' $1').trim()}
+                  </span>
+                </div>
+
+                {cancelled ? (
+                  <div className="lost-alert lost-alert-danger mt-3">
+                    <i className="bi bi-x-circle me-2" />This order was cancelled.
+                  </div>
+                ) : (
+                  <div className="rest-track mt-3">
+                    {ORDER_STEPS.map((s, i) => {
+                      const done = stepIdx >= i;
+                      const current = stepIdx === i;
+                      return (
+                        <div key={s} className={`rest-track-step ${done ? 'done' : ''} ${current ? 'current' : ''}`}>
+                          <span className="rest-track-dot"><i className={`bi ${i === 0 ? 'bi-hourglass-split' : i === 1 ? 'bi-fire' : i === 2 ? 'bi-bell' : 'bi-check2-circle'}`} /></span>
+                          <span className="rest-track-label">{ORDER_STEP_LABELS[s]}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                <div className="d-flex flex-wrap gap-2 mt-3">
+                  {(o.items || []).map((it, idx) => (
+                    <span key={idx} className="res-tag">{it.qty}× {it.name}</span>
+                  ))}
+                </div>
+                <div className="small text-muted mt-2">
+                  {o.acceptedAt ? `Kitchen started ${fmtElapsed(o.acceptedAt, now)} ago. ` : 'Waiting for the kitchen to accept… '}
+                  {o.servedAt ? `Served ${fmtElapsed(o.servedAt, now)} ago.` : ''}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {audits.length > 0 && (
         <div className="res-recent">

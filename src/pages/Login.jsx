@@ -6,6 +6,7 @@ import './auth.css';
 
 const roleHome = (role, email) => {
   if ((role === 'admin' || role === 'system') && isAdminAccount(email)) return '/Admin/Dashboard';
+  if (role === 'restaurant') return '/Admin/Restaurant/Manager';
   if (role === 'housekeeping') return '/Housekeeping/Dashboard';
   if (role === 'laundry') return '/Laundry/Dashboard';
   if (role === 'storekeeper') return '/Storekeeper/Dashboard';

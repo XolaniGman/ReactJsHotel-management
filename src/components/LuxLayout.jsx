@@ -77,6 +77,7 @@ const RESTAURANT_SECTIONS = [
   {
     label: 'Restaurant',
     items: [
+      { to: '/Admin/Restaurant/Manager', icon: 'bi-speedometer2', label: 'Manager Overview' },
       { to: '/Admin/Restaurant', icon: 'bi-egg-fried', label: 'Kitchen Queue' },
       { to: '/Admin/Restaurant/Tables', icon: 'bi-grid', label: 'Tables & Reservations' },
       { to: '/Admin/Restaurant/Menu', icon: 'bi-book', label: 'Menu Catalogue' },
@@ -138,6 +139,7 @@ export default function LuxLayout({ children }) {
   const isAdminView = role === 'admin' && isAdminAccount(user?.email);
 
   const base = isAdminView ? ADMIN_SECTIONS
+    : role === 'restaurant' ? [...NAV_SECTIONS, ...RESTAURANT_SECTIONS]
     : role === 'housekeeping' ? [...NAV_SECTIONS, ...HOUSEKEEPING_SECTIONS, ...RESTAURANT_SECTIONS]
     : role === 'laundry' ? [...NAV_SECTIONS, ...LAUNDRY_SECTIONS, ...RESTAURANT_SECTIONS]
     : role === 'storekeeper' ? [...NAV_SECTIONS, ...STOREKEEPER_SECTIONS, ...RESTAURANT_SECTIONS]
@@ -363,6 +365,7 @@ function pageTitle(path) {
   if (path === '/Admin/Restaurant/Menu') return 'Restaurant Menu';
   if (path === '/Admin/Restaurant/Tables') return 'Restaurant Tables';
   if (path === '/Admin/Restaurant/Reports') return 'Kitchen Report';
+  if (path === '/Admin/Restaurant/Manager') return 'Restaurant Manager';
   if (path.startsWith('/Admin/Restaurant')) return 'Kitchen Order Queue';
   if (path.startsWith('/Admin')) return 'Admin Dashboard';
   return 'Grand Hotel';

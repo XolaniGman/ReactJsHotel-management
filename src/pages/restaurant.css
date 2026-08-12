@@ -68,6 +68,23 @@
   cursor: not-allowed;
 }
 
+.rest-btn-link {
+  display: inline-block;
+  background: none;
+  border: none;
+  color: #775a19;
+  font-weight: 700;
+  font-size: 0.85rem;
+  font-family: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  padding: 0.35rem 0.5rem;
+}
+
+.rest-btn-link:hover {
+  text-decoration: underline;
+}
+
 .rest-hours {
   display: inline-flex;
   align-items: center;
@@ -332,6 +349,84 @@
   margin: 1.1rem 0 0.9rem;
 }
 
+.menu-cart-table-locked {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  background: #fbf4ea;
+  border: 1px solid rgba(201, 167, 106, 0.6);
+  border-radius: 10px;
+  padding: 0.6rem 0.75rem;
+  color: #7a5c1e;
+  font-size: 0.85rem;
+}
+
+.rest-track {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.rest-track-step {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  text-align: center;
+  position: relative;
+}
+
+.rest-track-step:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  top: 14px;
+  left: calc(50% + 18px);
+  width: calc(100% - 36px);
+  height: 2px;
+  background: #e9e1d2;
+}
+
+.rest-track-step.done:not(:last-child)::after {
+  background: #2f7d4f;
+}
+
+.rest-track-dot {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f0eae0;
+  color: #8a8377;
+  font-size: 0.85rem;
+  z-index: 1;
+}
+
+.rest-track-step.done .rest-track-dot {
+  background: #2f7d4f;
+  color: #fff;
+}
+
+.rest-track-step.current .rest-track-dot {
+  background: #9a7a38;
+  color: #fff;
+  box-shadow: 0 0 0 4px rgba(154, 122, 56, 0.18);
+}
+
+.rest-track-label {
+  font-size: 0.68rem;
+  font-weight: 800;
+  color: #6d7483;
+  text-transform: uppercase;
+  letter-spacing: 0.03rem;
+}
+
+.rest-track-step.done .rest-track-label,
+.rest-track-step.current .rest-track-label {
+  color: #172033;
+}
+
 .menu-cart-total {
   display: flex;
   justify-content: space-between;
@@ -581,6 +676,35 @@
 .ticket-btn.dark { background: #172033; }
 .ticket-btn.red { background: #b02a37; }
 
+.ticket-status {
+  display: inline-block;
+  background: #172033;
+  color: #fff;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  padding: 0.25rem 0.6rem;
+}
+
+.admin-link-row {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  background: #fff;
+  border: 1px solid rgba(231, 221, 205, 0.8);
+  border-radius: 12px;
+  padding: 0.7rem 0.85rem;
+  color: #172033;
+  text-decoration: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.admin-link-row:hover {
+  border-color: #c9a76a;
+  box-shadow: 0 4px 14px rgba(23, 32, 51, 0.08);
+  color: #172033;
+}
+
 /* ---------- Admin: floor plan ---------- */
 .table-floor {
   display: grid;
@@ -630,6 +754,39 @@
   color: #cfc4b2;
   margin-bottom: 0.5rem;
   display: inline-block;
+}
+
+.table-tile.tile-btn {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.table-tile.tile-btn:disabled {
+  cursor: not-allowed;
+}
+
+.table-tile.tile-selectable:hover {
+  border-color: #c9a76a;
+  transform: translateY(-2px);
+}
+
+.table-tile.tile-selectable.selected {
+  border-color: #775a19;
+  box-shadow: 0 0 0 2px rgba(119, 90, 25, 0.35);
+}
+
+.table-tile.tile-disabled {
+  opacity: 0.5;
+  background: #f6f2ea;
+}
+
+.rest-cta:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 /* ---------- Admin: reports ---------- */

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { listMenuItems, listTables, placeOrder } from '../services/restaurantService';
 import { listUserReservations } from '../services/reservationService';
@@ -11,6 +11,8 @@ const DIETARY_TAGS = ['Vegan', 'Vegetarian', 'Halal', 'Gluten-Free'];
 
 export default function RestaurantMenu() {
   const { user } = useAuth();
+  const [params] = useSearchParams();
+  const preTable = params.get('table');
   const [menu, setMenu] = useState([]);
   const [tables, setTables] = useState([]);
   const [activeRes, setActiveRes] = useState(null);
@@ -21,6 +23,7 @@ export default function RestaurantMenu() {
 
   const [cart, setCart] = useState([]);
   const [tableNumber, setTableNumber] = useState('');
+  const tableLocked = Boolean(preTable && tableNumber);
   const [chargeToRoom, setChargeToRoom] = useState(true);
   const [guestName, setGuestName] = useState(user?.name || '');
   const [guestContact, setGuestContact] = useState('');
@@ -39,9 +42,12 @@ export default function RestaurantMenu() {
       setTables(t);
       const active = r.find((x) => ['Approved', 'CheckedIn'].includes(x.status));
       setActiveRes(active || null);
+      if (preTable && t.some((x) => String(x.number) === preTable)) {
+        setTableNumber(preTable);
+      }
       setLoading(false);
     })();
-  }, [user?.uid]);
+  }, [user?.uid, preTable]);
 
   const categories = useMemo(
     () => ['All', ...Array.from(new Set(menu.map((m) => m.category).filter(Boolean)))],
@@ -125,6 +131,13 @@ export default function RestaurantMenu() {
       </div>
 
       {error && <div className="lost-alert lost-alert-danger mb-3"><i className="bi bi-exclamation-triangle me-2" />{error}</div>}
+
+      {preTable && !placed && (
+        <div className="lost-alert lost-alert-success mb-3">
+          <i className="bi bi-egg-fried me-2" />
+          {tableNumber ? `Ordering for Table ${tableNumber} — from your reservation.` : 'Start your order below.'}
+        </div>
+      )}
 
       {placed ? (
         <div className="rest-success">
@@ -243,12 +256,20 @@ export default function RestaurantMenu() {
 
                 <div className="menu-cart-fields">
                   <label className="book-label fw-bold small text-uppercase">Dining table</label>
-                  <select className="form-select mb-2" value={tableNumber} onChange={(e) => setTableNumber(e.target.value)}>
-                    <option value="">Select a table…</option>
-                    {tables.filter((t) => t.status === 'Available' || t.status === 'Reserved').map((t) => (
-                      <option key={t.id} value={t.number}>Table {t.number} — seats {t.capacity} ({t.location})</option>
-                    ))}
-                  </select>
+                  {tableLocked ? (
+                    <div className="menu-cart-table-locked mb-2">
+                      <i className="bi bi-lock-fill me-2" />
+                      <strong>Table {tableNumber}</strong>
+                      <span className="small text-muted">Locked from your reservation</span>
+                    </div>
+                  ) : (
+                    <select className="form-select mb-2" value={tableNumber} onChange={(e) => setTableNumber(e.target.value)}>
+                      <option value="">Select a table…</option>
+                      {tables.map((t) => (
+                        <option key={t.id} value={t.number}>Table {t.number} — seats {t.capacity} ({t.location})</option>
+                      ))}
+                    </select>
+                  )}
 
                   {user ? (
                     <div className="form-check form-switch mb-2">

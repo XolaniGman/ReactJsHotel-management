@@ -11,8 +11,12 @@ service cloud.firestore {
       return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
 
+    function isRestaurant() {
+      return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'restaurant';
+    }
+
     function isStaff() {
-      return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'housekeeping', 'laundry', 'storekeeper', 'maintenance'];
+      return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'restaurant', 'housekeeping', 'laundry', 'storekeeper', 'maintenance'];
     }
 
     function isOwnProfile() {
@@ -126,7 +130,7 @@ service cloud.firestore {
     // ---------- Restaurant ----------
     match /menuItems/{id} {
       allow read: if true;
-      allow create, update, delete: if isAdmin();
+      allow create, update, delete: if isAdmin() || isRestaurant();
     }
 
     match /tables/{id} {
@@ -146,7 +150,7 @@ service cloud.firestore {
 
     match /chefs/{id} {
       allow read: if isSignedIn();
-      allow create, update, delete: if isAdmin();
+      allow create, update, delete: if isAdmin() || isRestaurant();
     }
 
     match /cleanerSchedules/{id} {

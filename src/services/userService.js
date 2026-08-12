@@ -9,6 +9,7 @@ export const isAdminAccount = (email) => (email || '').trim().toLowerCase() === 
 
 export const DEMO_ACCOUNTS = {
   'admin@hotel.com': 'admin',
+  'restaurant@hotel.com': 'restaurant',
   'housekeeping@hotel.com': 'housekeeping',
   'laundry@hotel.com': 'laundry',
   'storekeeper@hotel.com': 'storekeeper',
