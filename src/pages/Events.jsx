@@ -74,7 +74,7 @@ export default function Events() {
         </div>
 
         <div className="events-toolbar">
-          <h2 className="section-title">Upcoming experiences</h2>
+          <h2 className="section-title">Coming experiences</h2>
           {isAdmin && (
             <a href="#/Events/Create" className="lux-btn-gold" onClick={(e) => { e.preventDefault(); window.location.hash = ''; window.location.href = '/Events/Create'; }}>
               <i className="bi bi-plus-lg me-2" /> Create Event
