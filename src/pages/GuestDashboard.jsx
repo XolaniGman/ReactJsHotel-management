@@ -217,6 +217,9 @@ export default function GuestDashboard() {
               <Link className="dash-quick-item" to="/Amenities/Request"><i className="bi bi-star" /> Request amenities</Link>
               <Link className="dash-quick-item" to="/Housekeeping/RequestRoomCleaning"><i className="bi bi-broom" /> Request cleaning</Link>
               <Link className="dash-quick-item" to="/Maintenance/Create"><i className="bi bi-tools" /> Report maintenance</Link>
+              <Link className="dash-quick-item" to="/Fleet/Vehicles"><i className="bi bi-car-front" /> Rent a vehicle</Link>
+              <Link className="dash-quick-item" to="/Fleet/Service"><i className="bi bi-taxi-front" /> Book a shuttle</Link>
+              <Link className="dash-quick-item" to="/Fleet/MyTrips"><i className="bi bi-signpost-split" /> Track my trips</Link>
               <Link className="dash-quick-item" to="/LostItems/Services"><i className="bi bi-search" /> Report lost item</Link>
               <Link className="dash-quick-item" to="/Events"><i className="bi bi-calendar-event" /> Book an event</Link>
               <Link className="dash-quick-item" to="/Restaurant/Reserve"><i className="bi bi-egg-fried" /> Reserve a table</Link>

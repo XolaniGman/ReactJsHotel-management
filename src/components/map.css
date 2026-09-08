@@ -1,0 +1,82 @@
+.fleet-map-root {
+  border-radius: 14px;
+  border: 1px solid #e2e8f0;
+  overflow: hidden;
+  z-index: 0;
+}
+
+.fleet-map-pin-wrap {
+  background: transparent;
+  border: none;
+}
+
+.fleet-map-pin {
+  width: 18px;
+  height: 18px;
+  border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg);
+  border: 2px solid #fff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+
+.fleet-map-pin::after {
+  content: '';
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #fff;
+  left: 3px;
+  top: 3px;
+}
+
+.leaflet-container {
+  font: inherit;
+}
+
+.fleet-damage-compare .fleet-damage-box {
+  position: relative;
+  display: block;
+  flex: 0 0 auto;
+  border: 1px dashed #cbd5e1;
+  border-radius: 12px;
+  padding: 0.5rem;
+  width: 172px;
+  cursor: pointer;
+  background: #fbfdff;
+}
+
+.fleet-damage-box img {
+  display: block;
+  width: 100%;
+  object-fit: cover;
+  border-radius: 8px;
+  margin-top: 0.35rem;
+}
+
+.fleet-damage-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 88px;
+  gap: 0.35rem;
+  color: #94a3b8;
+  font-size: 0.78rem;
+}
+
+.fleet-damage-cta {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+.spin {
+  animation: fleet-spin 1s linear infinite;
+}
+
+@keyframes fleet-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

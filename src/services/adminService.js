@@ -19,6 +19,7 @@ import { listCheckIns } from './checkinService';
 import { listPayments } from './billService';
 import { listAmenityRequests } from './amenityService';
 import { listLostReports } from './lostFoundService';
+import { seedFleetData } from './fleetService';
 import { todayISO, addDaysISO } from '../lib/utils';
 
 const schedulesCol = 'cleanerSchedules';
@@ -149,6 +150,7 @@ export const seedDemoData = async () => {
   for (const p of demoProducts) await createProduct(p);
 
   const restaurantSeed = await seedRestaurantData();
+  const fleetSeed = await seedFleetData();
 
   let createdReservations = 0;
   if (createdRooms.length > 0) {
@@ -197,6 +199,8 @@ export const seedDemoData = async () => {
     menuItems: restaurantSeed.menuItems,
     tables: restaurantSeed.tables,
     chefs: restaurantSeed.chefs,
+    fleetVehicles: fleetSeed.vehicles,
+    fleetDrivers: fleetSeed.drivers,
     reservations: createdReservations,
   };
 };

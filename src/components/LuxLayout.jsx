@@ -11,6 +11,7 @@ const NAV_SECTIONS = [
       { to: '/Rooms', icon: 'bi-door-open', label: 'Rooms' },
       { to: '/Events', icon: 'bi-calendar-event', label: 'Events' },
       { to: '/Restaurant', icon: 'bi-egg-fried', label: 'Restaurant' },
+      { to: '/Fleet/Vehicles', icon: 'bi-car-front', label: 'Car Rental' },
       { to: '/Amenities/Request', icon: 'bi-star', label: 'Services' },
     ],
   },
@@ -26,6 +27,10 @@ const GUEST_SECTIONS = [
       { to: '/Restaurant/Reserve', icon: 'bi-calendar-check', label: 'Reserve a Table' },
       { to: '/Housekeeping/RequestRoomCleaning', icon: 'bi-stars', label: 'Room Cleaning' },
       { to: '/Maintenance/Request', icon: 'bi-wrench-adjustable', label: 'Maintenance' },
+      { to: '/Fleet/Rent', icon: 'bi-car-front', label: 'Rent a Car' },
+      { to: '/Fleet/Service', icon: 'bi-taxi-front', label: 'Book a Shuttle' },
+      { to: '/Fleet/MyTrips', icon: 'bi-signpost-split', label: 'My Trips' },
+      { to: '/Fleet/Incident/Report', icon: 'bi-bug', label: 'Report Incident' },
       { to: '/LostItems/Services', icon: 'bi-search', label: 'Lost Item Reports' },
     ],
   },
@@ -69,6 +74,31 @@ const MAINTENANCE_SECTIONS = [
     label: 'Operations',
     items: [
       { to: '/Maintenance/Dashboard', icon: 'bi-tools', label: 'Room Maintenance' },
+    ],
+  },
+];
+
+const FLEET_OPERATOR_SECTIONS = [
+  {
+    label: 'Fleet Operations',
+    items: [
+      { to: '/Fleet/Dashboard', icon: 'bi-kanban', label: 'Fleet Ops' },
+      { to: '/Fleet/Charges', icon: 'bi-credit-card', label: 'Charges & Payments' },
+      { to: '/Fleet/Incidents', icon: 'bi-bug', label: 'Incident Register' },
+    ],
+  },
+];
+
+const FLEET_MANAGER_SECTIONS = [
+  {
+    label: 'Fleet Manager',
+    items: [
+      { to: '/Fleet/Manager', icon: 'bi-speedometer2', label: 'Manager Overview' },
+      { to: '/Fleet/Dashboard', icon: 'bi-kanban', label: 'Fleet Ops' },
+      { to: '/Fleet/Charges', icon: 'bi-credit-card', label: 'Charges' },
+      { to: '/Fleet/Incidents', icon: 'bi-bug', label: 'Incidents' },
+      { to: '/Fleet/Maintenance', icon: 'bi-wrench-adjustable', label: 'Work Orders' },
+      { to: '/Fleet/Vehicles', icon: 'bi-car-front', label: 'Vehicles Hub' },
     ],
   },
 ];
@@ -126,6 +156,17 @@ const ADMIN_SECTIONS = [
     label: 'Maintenance',
     items: [{ to: '/Maintenance/Dashboard', icon: 'bi-tools', label: 'Room Maintenance' }],
   },
+  {
+    label: 'Fleet',
+    items: [
+      { to: '/Fleet/Vehicles', icon: 'bi-car-front', label: 'Vehicles Hub' },
+      { to: '/Fleet/Dashboard', icon: 'bi-kanban', label: 'Fleet Ops' },
+      { to: '/Fleet/Charges', icon: 'bi-credit-card', label: 'Fleet Charges' },
+      { to: '/Fleet/Incidents', icon: 'bi-bug', label: 'Incidents' },
+      { to: '/Fleet/Maintenance', icon: 'bi-wrench-adjustable', label: 'Work Orders' },
+      { to: '/Fleet/Manager', icon: 'bi-speedometer2', label: 'Fleet Reports' },
+    ],
+  },
 ];
 
 export default function LuxLayout({ children }) {
@@ -144,6 +185,8 @@ export default function LuxLayout({ children }) {
     : role === 'laundry' ? [...NAV_SECTIONS, ...LAUNDRY_SECTIONS, ...RESTAURANT_SECTIONS]
     : role === 'storekeeper' ? [...NAV_SECTIONS, ...STOREKEEPER_SECTIONS, ...RESTAURANT_SECTIONS]
     : role === 'maintenance' ? [...NAV_SECTIONS, ...MAINTENANCE_SECTIONS, ...RESTAURANT_SECTIONS]
+    : role === 'fleet' ? [...NAV_SECTIONS, ...FLEET_OPERATOR_SECTIONS, ...RESTAURANT_SECTIONS]
+    : role === 'fleetmanager' ? [...NAV_SECTIONS, ...FLEET_MANAGER_SECTIONS, ...RESTAURANT_SECTIONS]
     : user ? [...NAV_SECTIONS, ...GUEST_SECTIONS]
     : NAV_SECTIONS;
 
@@ -352,6 +395,17 @@ function pageTitle(path) {
   if (path.startsWith('/Storekeeper')) return 'Storekeeper Dashboard';
   if (path.startsWith('/Maintenance/Dashboard')) return 'Maintenance Dashboard';
   if (path.startsWith('/Maintenance')) return 'Maintenance Request';
+  if (path.startsWith('/Fleet/MyTrips')) return 'My Trips';
+  if (path.startsWith('/Fleet/Incident/Report')) return 'Report Incident';
+  if (path.startsWith('/Fleet/Incidents')) return 'Incident Register';
+  if (path.startsWith('/Fleet/Maintenance')) return 'Work Orders & Maintenance';
+  if (path.startsWith('/Fleet/Service')) return 'Shuttle & Car Service';
+  if (path.startsWith('/Fleet/Rent')) return 'Book a Rental';
+  if (path.startsWith('/Fleet/Handover')) return 'Vehicle Handover';
+  if (path.startsWith('/Fleet/Charges')) return 'Fleet Charges';
+  if (path.startsWith('/Fleet/Dashboard')) return 'Fleet Ops';
+  if (path.startsWith('/Fleet/Manager')) return 'Fleet Manager';
+  if (path.startsWith('/Fleet/Vehicles') || path.startsWith('/Fleet')) return 'Vehicles Hub';
   if (path.startsWith('/Admin/Reservations')) return 'Reservations';
   if (path.startsWith('/Admin/Guests')) return 'Guests';
   if (path.startsWith('/Admin/CheckIns')) return 'Check-Ins';

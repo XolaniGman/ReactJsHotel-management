@@ -11,6 +11,8 @@ const roleHome = (role, email) => {
   if (role === 'laundry') return '/Laundry/Dashboard';
   if (role === 'storekeeper') return '/Storekeeper/Dashboard';
   if (role === 'maintenance') return '/Maintenance/Dashboard';
+  if (role === 'fleet') return '/Fleet/Dashboard';
+  if (role === 'fleetmanager') return '/Fleet/Manager';
   return '/Guest/Dashboard';
 };
 
@@ -113,8 +115,10 @@ export default function Login() {
               </p>
 
               <p className="text-muted" style={{ fontSize: '0.85rem', textAlign: 'center', margin: 0 }}>
-                Admin access is reserved for admin@hotel.com. Staff roles are assigned in the
-                Firebase console.
+                Admin access is reserved for admin@hotel.com. Staff demo accounts:{' '}
+                restaurant@hotel.com · housekeeping@hotel.com · laundry@hotel.com ·
+                storekeeper@hotel.com · mainatance@outlook.com · fleet@hotel.com ·
+                fleetmanager@hotel.com.
               </p>
             </div>
           </div>

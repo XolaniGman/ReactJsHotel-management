@@ -53,6 +53,17 @@ import AdminRestaurantMenu from './pages/AdminRestaurantMenu';
 import AdminRestaurantTables from './pages/AdminRestaurantTables';
 import AdminRestaurantReports from './pages/AdminRestaurantReports';
 import RestaurantManagerDashboard from './pages/RestaurantManagerDashboard';
+import FleetVehicles from './pages/FleetVehicles';
+import FleetRent from './pages/FleetRent';
+import FleetService from './pages/FleetService';
+import FleetMyTrips from './pages/FleetMyTrips';
+import FleetDashboard from './pages/FleetDashboard';
+import FleetHandover from './pages/FleetHandover';
+import FleetCharges from './pages/FleetCharges';
+import FleetManagerDashboard from './pages/FleetManagerDashboard';
+import FleetIncidentReport from './pages/FleetIncidentReport';
+import FleetIncidents from './pages/FleetIncidents';
+import FleetMaintenance from './pages/FleetMaintenance';
 
 const canAccessAdmin = (user) =>
   user?.role === 'admin' && isAdminAccount(user?.email);
@@ -84,7 +95,11 @@ function RequireRole({ roles = [], children }) {
             ? '/Admin/Dashboard'
             : user?.role === 'restaurant'
               ? '/Admin/Restaurant/Manager'
-              : '/Guest/Dashboard'
+              : user?.role === 'fleet'
+                ? '/Fleet/Dashboard'
+                : user?.role === 'fleetmanager'
+                  ? '/Fleet/Manager'
+                  : '/Guest/Dashboard'
         }
         replace
       />
@@ -98,9 +113,11 @@ function RequireRole({ roles = [], children }) {
   return children;
 }
 
-const STAFF_ROLES = ['admin', 'housekeeping', 'laundry', 'storekeeper', 'maintenance', 'system'];
+const STAFF_ROLES = ['admin', 'housekeeping', 'laundry', 'storekeeper', 'maintenance', 'system', 'fleet', 'fleetmanager'];
 const ADMIN_ROLES = ['admin', 'system'];
 const RESTAURANT_ROLES = ['restaurant', ...STAFF_ROLES];
+const FLEET_ROLES = ['fleet', 'fleetmanager', 'admin', 'system'];
+const MANAGER_ROLES = ['fleetmanager', 'admin', 'system'];
 
 export default function App() {
   return (
@@ -121,6 +138,7 @@ export default function App() {
                   <Route path="/Events" element={<Events />} />
                   <Route path="/Restaurant" element={<RestaurantMenu />} />
                   <Route path="/Restaurant/Reserve" element={<RestaurantReserve />} />
+                  <Route path="/Fleet/Vehicles" element={<FleetVehicles />} />
                   <Route path="/Amenities/Request" element={<Services />} />
                   <Route path="/Laundry" element={<Services />} />
                   <Route path="/Account/Login" element={<Login />} />
@@ -136,6 +154,9 @@ export default function App() {
                   <Route path="/Housekeeping" element={<RequireAuth><Housekeeping /></RequireAuth>} />
                   <Route path="/Maintenance/Request" element={<RequireAuth><MaintenanceRequest /></RequireAuth>} />
                   <Route path="/Maintenance/Create" element={<RequireAuth><MaintenanceRequest /></RequireAuth>} />
+                  <Route path="/Fleet/Rent" element={<RequireAuth><FleetRent /></RequireAuth>} />
+                  <Route path="/Fleet/Service" element={<RequireAuth><FleetService /></RequireAuth>} />
+                  <Route path="/Fleet/MyTrips" element={<RequireAuth><FleetMyTrips /></RequireAuth>} />
                   <Route path="/CheckIns/SelfCheckInWizard" element={<RequireAuth><SelfCheckInWizard /></RequireAuth>} />
                   <Route path="/CheckIns/CheckInWelcome" element={<RequireAuth><CheckInWelcome /></RequireAuth>} />
 
@@ -157,6 +178,14 @@ export default function App() {
                   <Route path="/Storekeeper/IssueToRoom" element={<RequireRole roles={STAFF_ROLES}><StorekeeperIssueToRoom /></RequireRole>} />
                   <Route path="/Storekeeper/Adjustments" element={<RequireRole roles={STAFF_ROLES}><StorekeeperAdjustments /></RequireRole>} />
                   <Route path="/Maintenance/Dashboard" element={<RequireRole roles={STAFF_ROLES}><MaintenanceDashboard /></RequireRole>} />
+
+                  <Route path="/Fleet/Dashboard" element={<RequireRole roles={FLEET_ROLES}><FleetDashboard /></RequireRole>} />
+                  <Route path="/Fleet/Charges" element={<RequireRole roles={FLEET_ROLES}><FleetCharges /></RequireRole>} />
+                  <Route path="/Fleet/Handover/:id" element={<RequireRole roles={FLEET_ROLES}><FleetHandover /></RequireRole>} />
+                  <Route path="/Fleet/Manager" element={<RequireRole roles={MANAGER_ROLES}><FleetManagerDashboard /></RequireRole>} />
+                  <Route path="/Fleet/Incident/Report" element={<RequireAuth><FleetIncidentReport /></RequireAuth>} />
+                  <Route path="/Fleet/Incidents" element={<RequireRole roles={FLEET_ROLES}><FleetIncidents /></RequireRole>} />
+                  <Route path="/Fleet/Maintenance" element={<RequireRole roles={MANAGER_ROLES}><FleetMaintenance /></RequireRole>} />
 
                   <Route path="/Admin/Dashboard" element={<RequireRole roles={ADMIN_ROLES}><AdminDashboard /></RequireRole>} />
                   <Route path="/Admin/Reservations" element={<RequireRole roles={ADMIN_ROLES}><AdminReservations /></RequireRole>} />

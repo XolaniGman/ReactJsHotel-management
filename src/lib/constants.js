@@ -80,3 +80,51 @@ export const PRODUCT_CATEGORIES = ['Consumable', 'Reusable', 'Amenity'];
 export const MAINTENANCE_STATUSES = ['Open', 'InProgress', 'OnHold', 'Completed'];
 
 export const STOCK_ACTIONS = ['StockIn', 'IssuedToRoom', 'ReturnedToStorage', 'Adjustment', 'Lost'];
+
+export const VEHICLE_TYPES = ['Hatchback', 'Sedan', 'SUV', 'Luxury', 'Shuttle'];
+export const VEHICLE_CATEGORIES = ['Compact', 'Sedan', 'SUV', 'Luxury', 'Shuttle'];
+export const VEHICLE_TRANSMISSIONS = ['Automatic', 'Manual'];
+export const VEHICLE_STATUSES = ['Available', 'Reserved', 'InMaintenance', 'OutOfService'];
+
+export const CAR_BOOKING_STATUSES = [
+  'PendingConfirmation',
+  'Confirmed',
+  'CheckedOut',
+  'CheckedIn',
+  'Cancelled',
+  'ModifyRequested',
+];
+
+export const CAR_SERVICE_STATUSES = [
+  'PendingAssignment',
+  'Assigned',
+  'EnRoute',
+  'Arrived',
+  'Completed',
+  'Cancelled',
+];
+
+export const CAR_SERVICE_TYPES = ['Airport Transfer', 'Local Trip', 'Point-to-Point'];
+
+export const CAR_RENTAL_ADDONS = [
+  { name: 'Child Seat', price: 100 },
+  { name: 'GPS Navigation', price: 80 },
+  { name: 'Extra Driver', price: 150 },
+  { name: 'Wi-Fi Hotspot', price: 120 },
+  { name: 'Collision Waiver', price: 200 },
+];
+
+export const DEPOSIT_AMOUNT = 500;
+export const CANCELLATION_WINDOW_HOURS = 48;
+export const CANCELLATION_FEE = 250;
+
+export const HANDOVER_ITEMS = [
+  'Exterior condition',
+  'Interior condition',
+  'Tyres / rims',
+  'Windscreen & mirrors',
+  'Lights & indicators',
+  'Boot / storage area',
+  'Spare wheel & tools',
+  'Audio / climate controls',
+];

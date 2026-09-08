@@ -14,6 +14,8 @@ export const DEMO_ACCOUNTS = {
   'laundry@hotel.com': 'laundry',
   'storekeeper@hotel.com': 'storekeeper',
   'mainatance@outlook.com': 'maintenance',
+  'fleet@hotel.com': 'fleet',
+  'fleetmanager@hotel.com': 'fleetmanager',
   'system@hotel.com': 'system',
 };
 

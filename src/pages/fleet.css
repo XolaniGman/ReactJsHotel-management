@@ -1,0 +1,422 @@
+.fleet-pill,
+.fleet-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.38rem 0.7rem;
+  font-size: 0.68rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+.category-badge {
+  background: rgba(12, 34, 57, 0.82);
+  color: #ffd9a0;
+  margin-left: 0.4rem;
+}
+
+.fleet-category-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.35rem 0.35rem;
+}
+
+.fleet-category-head .category-badge {
+  margin-left: 0;
+}
+
+.fleet-thumb-img {
+  width: 72px;
+  height: 50px;
+  border-radius: 10px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.vehicle-pick-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0.75rem;
+}
+
+.vehicle-pick {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  border: 1px solid #dee2e6;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #fff;
+  padding: 0;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.vehicle-pick img {
+  width: 100%;
+  height: 110px;
+  object-fit: cover;
+  display: block;
+}
+
+.vehicle-pick-body {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 0.7rem;
+}
+
+.vehicle-pick.is-selected {
+  border-color: #2f7d4f;
+  box-shadow: 0 0 0 2px rgba(47, 125, 79, 0.25);
+}
+
+.vehicle-pick.is-busy:not(.is-selected) {
+  filter: grayscale(0.7);
+  opacity: 0.75;
+}
+
+.vehicle-pick-check {
+  font-size: 1.25rem;
+  color: #2f7d4f;
+  flex-shrink: 0;
+}
+
+.fleet-pill-available,
+.fleet-badge-Available {
+  background: #edf8f1;
+  color: #2f7d4f;
+}
+
+.fleet-pill-reserved,
+.fleet-badge-Reserved {
+  background: #edf4ff;
+  color: #355f8c;
+}
+
+.fleet-pill-maintenance,
+.fleet-badge-InMaintenance {
+  background: #fff6db;
+  color: #8a640e;
+}
+
+.fleet-pill-out,
+.fleet-badge-OutOfService {
+  background: #fff1f1;
+  color: #a33a2d;
+}
+
+.fleet-code-tag {
+  display: inline-block;
+  padding: 0 0.45rem;
+  margin: 0 0.15rem;
+  border-radius: 6px;
+  background: #eef2f6;
+  border: 1px solid #dbe3ec;
+  font-size: 0.78rem;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+.fleet-trip-map {
+  margin-top: 0.75rem;
+  max-width: 460px;
+}
+
+.live-pulse {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 0.4rem;
+  border-radius: 50%;
+  background: #2f7d4f;
+  animation: fleet-live-pulse 1.2s ease-in-out infinite;
+}
+
+.match-score {
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: #2f7d4f;
+  background: #eaf6ee;
+  border: 1px solid #cfe9d9;
+  border-radius: 999px;
+  padding: 0.2rem 0.6rem;
+  white-space: nowrap;
+}
+
+@keyframes fleet-live-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(47, 125, 79, 0.55); }
+  50% { box-shadow: 0 0 0 5px rgba(47, 125, 79, 0); }
+}
+
+.fleet-badge-PendingConfirmation,
+.fleet-badge-PendingAssignment {
+  background: #f4ecdf;
+  color: #775a19;
+}
+
+.fleet-badge-Confirmed,
+.fleet-badge-Assigned,
+.fleet-badge-EnRoute,
+.fleet-badge-Arrived {
+  background: #edf4ff;
+  color: #355f8c;
+}
+
+.fleet-badge-CheckedOut {
+  background: #f0edff;
+  color: #5b51a8;
+}
+
+.fleet-badge-CheckedIn,
+.fleet-badge-Completed {
+  background: #edf8f1;
+  color: #2f7d4f;
+}
+
+.fleet-badge-Cancelled,
+.fleet-badge-ModifyRequested {
+  background: #fff1f1;
+  color: #a33a2d;
+}
+
+.vehicle-spec {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: #f4ecdf;
+  color: #5f4614;
+  border-radius: 8px;
+  padding: 0.35rem 0.6rem;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.vehicle-spec i {
+  color: #775a19;
+}
+
+.fleet-driver-card {
+  background: #fff;
+  border: 1px solid #e7ddcd;
+  padding: 1rem;
+}
+
+.fleet-driver-card .avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #172033;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+}
+
+.fleet-trip-step {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.fleet-trip-step .step-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid #e7ddcd;
+  background: #fff;
+  flex: 0 0 auto;
+}
+
+.fleet-trip-step.is-active .step-dot {
+  background: #775a19;
+  border-color: #775a19;
+}
+
+.fleet-trip-step.is-done .step-dot {
+  background: #2f7d4f;
+  border-color: #2f7d4f;
+}
+
+.fleet-quote-box {
+  background: #fffdf9;
+  border: 1px solid #e7ddcd;
+  border-radius: 14px;
+  padding: 1.25rem;
+}
+
+.fleet-quote-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px dashed #e7ddcd;
+}
+
+.fleet-quote-row strong {
+  font-family: 'Noto Serif', serif;
+}
+
+.fleet-quote-total {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-top: 1rem;
+  color: #172033;
+}
+
+.fleet-quote-total .amount {
+  font-size: 1.6rem;
+  font-weight: 900;
+  font-family: 'Noto Serif', serif;
+  color: #775a19;
+}
+
+.fleet-form-section {
+  background: #fff;
+  border: 1px solid #e7ddcd;
+  border-radius: 14px;
+  padding: 1.25rem;
+}
+
+.fleet-form-section h3 {
+  font-family: 'Noto Serif', serif;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #172033;
+  margin-bottom: 1rem;
+}
+
+.fleet-manage-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 1rem;
+}
+
+.fleet-manage-tile {
+  background: #fffdf9;
+  border: 1px solid #e7ddcd;
+  border-radius: 12px;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.fleet-manage-tile .tile-title {
+  font-weight: 900;
+  color: #172033;
+}
+
+.fleet-manage-tile .tile-meta {
+  font-size: 0.78rem;
+  color: #6d7483;
+}
+
+.fleet-thumb {
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+  object-fit: cover;
+  background: #f4ecdf;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #775a19;
+  font-size: 1.3rem;
+  flex: 0 0 auto;
+}
+
+.fleet-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 1.2rem;
+  border-bottom: 1px solid #eee6da;
+}
+
+.fleet-row:last-child {
+  border-bottom: 0;
+}
+
+/* ---- Incidents (4.19) & work orders (4.20) ---- */
+.incident-hero {
+  border-radius: 14px;
+  padding: 1.25rem 1.5rem;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  background: linear-gradient(135deg, #355f8c, #26456a);
+}
+
+.incident-hero.low { background: linear-gradient(135deg, #2f7d4f, #1f5c38); }
+.incident-hero.medium { background: linear-gradient(135deg, #b8860b, #8a640e); }
+.incident-hero.high { background: linear-gradient(135deg, #a33a2d, #7a251b); }
+
+.sev-chip {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0.3rem 0.6rem;
+  border-radius: 8px;
+}
+.sev-Low { background: #edf8f1; color: #2f7d4f; }
+.sev-Medium { background: #f4ecdf; color: #775a19; }
+.sev-High { background: #fff1f1; color: #a33a2d; }
+
+.fleet-badge-Open { background: #f4ecdf; color: #775a19; }
+.fleet-badge-Suspended,
+.fleet-badge-AwaitingApproval { background: #fff1f1; color: #a33a2d; }
+.fleet-badge-UnderReview,
+.fleet-badge-InProgress,
+.fleet-badge-AwaitingParts { background: #edf4ff; color: #355f8c; }
+.fleet-badge-Adjudicating { background: #f0edff; color: #5b51a8; }
+.fleet-badge-Resolved,
+.fleet-badge-SignedOff { background: #edf8f1; color: #2f7d4f; }
+.fleet-badge-Cancelled { background: #e9e9ef; color: #6b6b7b; }
+
+.evidence-thumb {
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid #eee6da;
+}
+
+.wo-card {
+  border: 1px solid #eee6da;
+  border-radius: 14px;
+  background: #fff;
+  padding: 1rem 1.2rem;
+  margin-bottom: 0.8rem;
+}
+
+.rtc-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.45rem 0;
+  border-bottom: 1px dashed #eee6da;
+}
+.rtc-item:last-child { border-bottom: 0; }
+
+.lint-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: #f0edff;
+  color: #5b51a8;
+  border-radius: 8px;
+  padding: 0.25rem 0.55rem;
+  font-size: 0.7rem;
+  font-weight: 800;
+}

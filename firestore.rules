@@ -16,7 +16,11 @@ service cloud.firestore {
     }
 
     function isStaff() {
-      return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'restaurant', 'housekeeping', 'laundry', 'storekeeper', 'maintenance'];
+      return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'restaurant', 'housekeeping', 'laundry', 'storekeeper', 'maintenance', 'fleet', 'fleetmanager'];
+    }
+
+    function isFleet() {
+      return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'fleet', 'fleetmanager'];
     }
 
     function isOwnProfile() {
@@ -156,6 +160,44 @@ service cloud.firestore {
     match /cleanerSchedules/{id} {
       allow read: if isStaff();
       allow create, update, delete: if isAdmin();
+    }
+
+    // ---------- Car rental / fleet ----------
+    match /fleetVehicles/{id} {
+      allow read: if true;
+      allow create, update, delete: if isFleet();
+    }
+
+    match /carBookings/{id} {
+      allow read, create: if isSignedIn();
+      allow update: if isSignedIn() && (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'fleet', 'fleetmanager'] || request.auth.uid == resource.data.guestUid);
+      allow delete: if isAdmin();
+    }
+
+    match /carServiceRequests/{id} {
+      allow read, create: if isSignedIn();
+      allow update: if isSignedIn() && (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'fleet', 'fleetmanager'] || request.auth.uid == resource.data.guestUid);
+      allow delete: if isAdmin();
+    }
+
+    match /fleetDrivers/{id} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isFleet();
+    }
+
+    match /vehicleHandovers/{id} {
+      allow read, create, update, delete: if isSignedIn();
+    }
+
+    match /fleetIncidents/{id} {
+      allow read, create: if isSignedIn();
+      allow update: if isFleet() || (isSignedIn() && request.auth.uid == resource.data.reporterUid);
+      allow delete: if isAdmin();
+    }
+
+    match /fleetWorkOrders/{id} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isFleet();
     }
 
     match /{document=**} {

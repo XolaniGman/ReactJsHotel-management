@@ -38,7 +38,7 @@ export default function AdminDashboard() {
     setSeedMsg('');
     try {
       const result = await seedDemoData();
-      setSeedMsg(`Seeded ${result.rooms} rooms, ${result.events} events, ${result.amenities} amenities, ${result.products} products, ${result.menuItems} menu items, ${result.tables} tables, ${result.chefs} chefs, ${result.reservations} approved bookings.`);
+      setSeedMsg(`Seeded ${result.rooms} rooms, ${result.events} events, ${result.amenities} amenities, ${result.products} products, ${result.menuItems} menu items, ${result.tables} tables, ${result.chefs} chefs, ${result.fleetVehicles} fleet vehicles, ${result.fleetDrivers} drivers, ${result.reservations} approved bookings.`);
       window.location.reload();
     } catch (err) {
       setSeedMsg(`Seed failed: ${err?.message || 'Please check your Firestore rules.'}`);
