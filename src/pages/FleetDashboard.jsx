@@ -77,9 +77,12 @@ export default function FleetDashboard() {
   };
 
   const confirm = async (id) => {
-    const unit = confirmUnit[id];
-    if (!unit) return setNotice('Select a vehicle unit to assign before confirming.');
-    const res = await confirmCarBooking(id, { unitNumber: unit, assignedBy: user.name, overrideNote: overrideNote[id] });
+    const selectedVehicleId = confirmUnit[id];
+    if (!selectedVehicleId) return setNotice('Select a vehicle unit to assign before confirming.');
+    const selectedVehicle = bookableVehicles.find((v) => v.id === selectedVehicleId);
+    if (!selectedVehicle) return setNotice('That vehicle is no longer available — pick another.');
+    const unitNumber = selectedVehicle.unitNumber || selectedVehicle.plateNumber || selectedVehicle.name;
+    const res = await confirmCarBooking(id, { unitNumber, vehicleId: selectedVehicle.id, assignedBy: user.name, overrideNote: overrideNote[id] });
     if (res?.error) return setNotice(res.error);
     setNotice('Booking confirmed — vehicle locked for the rental window.');
   };
@@ -292,7 +295,7 @@ export default function FleetDashboard() {
                                 <select className="form-select form-select-sm" style={{ width: 170 }} value={confirmUnit[b.id] || ''} onChange={(e) => setConfirmUnit({ ...confirmUnit, [b.id]: e.target.value })}>
                                   <option value="">Assign unit…</option>
                                   {bookableVehicles.map((v) => (
-                                    <option key={v.id} value={v.unitNumber || v.plateNumber || v.name}>{v.name} · {v.unitNumber || v.plateNumber}</option>
+                                    <option key={v.id} value={v.id}>{v.name} · {v.unitNumber || v.plateNumber}</option>
                                   ))}
                                 </select>
                                 <button type="button" className="btn-request-start btn-request-done" onClick={() => confirm(b.id)}>Confirm</button>
@@ -344,7 +347,7 @@ export default function FleetDashboard() {
                         <Fragment key={b.id}>
                         <tr>
                           <td>
-                            <div className="task-name">{b.guestName}</div>
+                            <div className="task-name">{b.guestName} {b.guestArrived && <span className={`fleet-badge ${b.guestArrived ? 'fleet-badge-SignedOff' : ''}`} style={{ marginLeft: 6 }}><i className="bi bi-person-check-fill me-1" />Arrived</span>}</div>
                             <div className="task-sub">{b.ref}</div>
                           </td>
                           <td>

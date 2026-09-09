@@ -84,7 +84,7 @@ export const STOCK_ACTIONS = ['StockIn', 'IssuedToRoom', 'ReturnedToStorage', 'A
 export const VEHICLE_TYPES = ['Hatchback', 'Sedan', 'SUV', 'Luxury', 'Shuttle'];
 export const VEHICLE_CATEGORIES = ['Compact', 'Sedan', 'SUV', 'Luxury', 'Shuttle'];
 export const VEHICLE_TRANSMISSIONS = ['Automatic', 'Manual'];
-export const VEHICLE_STATUSES = ['Available', 'Reserved', 'InMaintenance', 'OutOfService', 'PendingInspection'];
+export const VEHICLE_STATUSES = ['Available', 'Reserved', 'Rented', 'InMaintenance', 'OutOfService', 'PendingInspection'];
 
 export const CAR_BOOKING_STATUSES = [
   'PendingConfirmation',
@@ -162,6 +162,10 @@ export const ONE_WAY_FEES = {
 export const YOUNG_DRIVER_SURCHARGE_PER_DAY = 155;
 export const YOUNG_DRIVER_SURCHARGE_CAP_DAYS = 10;
 export const YOUNG_DRIVER_AGE_THRESHOLD = 25;
+
+// Hard eligibility gate at check-out (distinct from the young-driver pricing
+// surcharge above) — a driver below this age fails licence verification outright.
+export const MIN_DRIVING_AGE = 18;
 
 // Liability cap when the Collision Waiver add-on is selected; without it the
 // guest's exposure is capped at the vehicle deposit instead.

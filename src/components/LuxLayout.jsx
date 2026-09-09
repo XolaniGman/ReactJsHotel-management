@@ -31,6 +31,7 @@ const GUEST_SECTIONS = [
       { to: '/Fleet/Rent', icon: 'bi-car-front', label: 'Rent a Car' },
       { to: '/Fleet/Service', icon: 'bi-taxi-front', label: 'Book a Shuttle' },
       { to: '/Fleet/MyTrips', icon: 'bi-signpost-split', label: 'My Trips' },
+      { to: '/Fleet/Collection', icon: 'bi-box-arrow-right', label: 'Fetch the Car' },
       { to: '/Fleet/Incident/Report', icon: 'bi-bug', label: 'Report Incident' },
       { to: '/LostItems/Services', icon: 'bi-search', label: 'Lost Item Reports' },
     ],

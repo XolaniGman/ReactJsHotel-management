@@ -13,9 +13,11 @@ import {
   listFleetIncidents,
   resolveIncidentReview,
   updateBookingLivePosition,
+  recordBookingPayment,
 } from '../services/fleetService';
 import { cancellationPreview, rentalCancellationPenalty, serviceCancellationPenalty } from '../lib/fleetAlgo';
 import FleetMap from '../components/FleetMap';
+import StripeCheckoutModal from '../components/StripeCheckoutModal';
 import { formatPrice, formatGuestDate, formatDateTime, statusTone, todayISO } from '../lib/utils';
 import './guest.css';
 import './rooms.css';
@@ -40,6 +42,19 @@ export default function FleetMyTrips() {
   const [liveWatch, setLiveWatch] = useState(null);
   const [liveBookingId, setLiveBookingId] = useState('');
   const [historyOpenId, setHistoryOpenId] = useState('');
+  const [payModal, setPayModal] = useState(null);
+
+  const bookingBalanceDue = (b) =>
+    Math.max(0, Number(b.estimatedTotal || 0) + Number(b.finalCharges || 0) - Number(b.paidAmount || 0));
+
+  const confirmStripePayment = async () => {
+    const res = await recordBookingPayment(payModal.bookingId, {
+      amount: payModal.amount,
+      byName: user.name,
+      method: 'Stripe',
+    });
+    if (res?.error) throw new Error(res.error);
+  };
 
   useEffect(() => () => {
     if (liveWatch) navigator.geolocation.clearWatch(liveWatch);
@@ -212,6 +227,17 @@ export default function FleetMyTrips() {
                     <span>{b.days} day(s) · {formatPrice(b.estimatedTotal)}</span>
                     {isStaff && b.guestName && <span><i className="bi bi-person me-1" />{b.guestName}</span>}
                   </div>
+                  {!isStaff && b.status !== 'Cancelled' && (
+                    bookingBalanceDue(b) > 0 ? (
+                      <div className="dash-row-meta">
+                        <span className="fleet-flag fleet-flag-warn"><i className="bi bi-credit-card me-1" />Balance due: {formatPrice(bookingBalanceDue(b))}</span>
+                      </div>
+                    ) : (
+                      <div className="dash-row-meta">
+                        <span className="fleet-flag" style={{ background: '#edf8f1', color: '#2f7d4f' }}><i className="bi bi-check-circle me-1" />Paid in full{b.paymentMethod ? ` · ${b.paymentMethod}` : ''}</span>
+                      </div>
+                    )
+                  )}
                   {!isStaff && (() => {
                     const due = dueBack(b);
                     if (!due) return null;
@@ -337,6 +363,25 @@ export default function FleetMyTrips() {
                   )}
                 </div>
                 <div className="d-flex align-items-center gap-2 flex-wrap">
+                  {!isStaff && b.status === 'Confirmed' && (
+                    <Link to={`/Fleet/Collection/${b.id}`} className="btn btn-sm btn-success">
+                      <i className="bi bi-box-arrow-right me-1" />Start pickup
+                    </Link>
+                  )}
+                  {!isStaff && b.status === 'CheckedOut' && !b.guestAcknowledgedAt && (
+                    <Link to={`/Fleet/Collection/${b.id}`} className="btn btn-sm btn-outline-success">
+                      <i className="bi bi-pen me-1" />Review &amp; sign
+                    </Link>
+                  )}
+                  {!isStaff && b.status !== 'Cancelled' && bookingBalanceDue(b) > 0 && (
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-success"
+                      onClick={() => setPayModal({ bookingId: b.id, amount: bookingBalanceDue(b), vehicleName: b.vehicleName })}
+                    >
+                      <i className="bi bi-credit-card me-1" />Pay {formatPrice(bookingBalanceDue(b))}
+                    </button>
+                  )}
                   {!isStaff && !['Cancelled', 'PendingInspection', 'CheckedIn'].includes(b.status) && (
                     <Link to={`/Fleet/Incident/Report?type=booking&id=${b.id}`} className="btn btn-sm btn-outline-primary">
                       <i className="bi bi-bug me-1" />Report incident
@@ -502,6 +547,19 @@ export default function FleetMyTrips() {
             </form>
           </div>
         </div>
+      )}
+
+      {payModal && (
+        <StripeCheckoutModal
+          amount={payModal.amount}
+          description={`Rental booking · ${payModal.vehicleName}`}
+          onConfirm={confirmStripePayment}
+          onDone={() => {
+            setPayModal(null);
+            setNotice(`Payment of ${formatPrice(payModal.amount)} received via Stripe.`);
+          }}
+          onCancel={() => setPayModal(null)}
+        />
       )}
     </div>
   );

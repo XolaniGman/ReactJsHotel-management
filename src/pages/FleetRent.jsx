@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { getFleetVehicle, computeRentalQuote, createCarBooking, listFleetVehicles } from '../services/fleetService';
+import { getFleetVehicle, computeRentalQuote, createCarBooking, listFleetVehicles, recordBookingPayment } from '../services/fleetService';
 import { listUserReservations } from '../services/reservationService';
 import { scanLicence } from '../services/ocr';
 import { smartMatchVehicles } from '../lib/fleetAlgo';
 import { formatPrice, todayISO, addDaysISO, nightsBetween, formatGuestDate } from '../lib/utils';
 import { CAR_RENTAL_ADDONS, ADDITIONAL_DRIVER_FEE, FLEET_BRANCHES } from '../lib/constants';
+import StripeCheckoutModal from '../components/StripeCheckoutModal';
 import './guest.css';
 import './rooms.css';
 import './fleet.css';
@@ -30,6 +31,7 @@ export default function FleetRent() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [pendingPayment, setPendingPayment] = useState(null);
   const [scannerBusy, setScannerBusy] = useState(false);
   const [scanNote, setScanNote] = useState('');
   const [documentReviewRequired, setDocumentReviewRequired] = useState(false);
@@ -134,9 +136,20 @@ export default function FleetRent() {
     });
     setSubmitting(false);
     if (result?.error) return setError(result.error);
-    setSuccess(
-      'Your rental request has been submitted with status “Pending Confirmation”. Our front desk will confirm your vehicle shortly.',
-    );
+    setPendingPayment({
+      bookingId: result.id,
+      amount: quote?.estimatedTotal || 0,
+      vehicleName: vehicle.name,
+    });
+  };
+
+  const confirmStripePayment = async () => {
+    const res = await recordBookingPayment(pendingPayment.bookingId, {
+      amount: pendingPayment.amount,
+      byName: user.name,
+      method: 'Stripe',
+    });
+    if (res?.error) throw new Error(res.error);
   };
 
   return (
@@ -161,6 +174,26 @@ export default function FleetRent() {
           <i className="bi bi-check-circle me-2" />{success}{' '}
           <Link to="/Fleet/MyTrips" className="fw-bold text-decoration-none">View my bookings →</Link>
         </div>
+      )}
+
+      {pendingPayment && (
+        <StripeCheckoutModal
+          amount={pendingPayment.amount}
+          description={`Rental booking · ${pendingPayment.vehicleName}`}
+          onConfirm={confirmStripePayment}
+          onDone={() => {
+            setPendingPayment(null);
+            setSuccess(
+              `Your rental request has been submitted and paid in full (${formatPrice(pendingPayment.amount)} via Stripe). Our front desk will confirm your vehicle shortly.`,
+            );
+          }}
+          onCancel={() => {
+            setPendingPayment(null);
+            setSuccess(
+              'Your rental request has been submitted with status “Pending Confirmation”. Payment is still required to confirm your booking — you can complete it anytime from My Trips.',
+            );
+          }}
+        />
       )}
 
       {!vehicle ? (

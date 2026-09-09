@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { listUserReservations } from '../services/reservationService';
 import { listBillsForGuest } from '../services/billService';
 import { listTableReservations, updateTableReservationStatus } from '../services/restaurantService';
+import { subscribeCarBookings, collectionStepLabel, bookingDisplay } from '../services/fleetService';
 import { formatPrice, formatGuestDate, todayISO, nightsBetween } from '../lib/utils';
 import './palm.css';
 
@@ -34,6 +35,7 @@ export default function GuestDashboard() {
   const [reservations, setReservations] = useState([]);
   const [bills, setBills] = useState([]);
   const [dining, setDining] = useState([]);
+  const [cars, setCars] = useState([]);
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState('');
   const [checkingIn, setCheckingIn] = useState('');
@@ -58,6 +60,11 @@ export default function GuestDashboard() {
     if (user?.uid) load();
   }, [user?.uid]);
 
+  useEffect(() => {
+    if (!user?.uid) return undefined;
+    return subscribeCarBookings((all) => setCars(all.filter((b) => b.guestUid === user.uid)));
+  }, [user?.uid]);
+
   const activeRes = reservations.find((r) => r.status === 'CheckedIn') || reservations.find((r) => r.status === 'Approved');
   const latestBill = activeRes
     ? bills.find((b) => b.reservationId === activeRes.id) || bills[0]
@@ -71,6 +78,39 @@ export default function GuestDashboard() {
     slot.setHours(hh, mm, 0, 0);
     return Date.now() >= slot.getTime() - 15 * 60000;
   };
+
+  const carDue = (b) => {
+    if (b.status === 'PendingConfirmation') return { tone: 'warn', label: 'Awaiting confirmation' };
+    if (b.status === 'Confirmed') {
+      const started = b.guestArrived || (b.collectionProgress?.step && b.collectionProgress.step !== 'prep');
+      return started ? { tone: 'info', label: `Collection in progress · ${collectionStepLabel(b.collectionProgress?.step)}` } : { tone: 'info', label: `Ready for pick-up · ${b.pickupDate} ${b.pickupTime || ''}` };
+    }
+    if (b.status === 'CheckedOut') {
+      return b.guestAcknowledgedAt || b.guestSignature
+        ? { tone: 'success', label: 'Keys handed over' }
+        : { tone: 'warn', label: 'Please review & sign your condition report' };
+    }
+    return { tone: 'muted', label: bookingDisplay(b.status) };
+  };
+
+  const carCta = (b) => {
+    if (b.status === 'Confirmed') {
+      const started = b.guestArrived || (b.collectionProgress?.step && b.collectionProgress.step !== 'prep');
+      return { to: `/Fleet/Collection/${b.id}`, icon: 'bi-box-arrow-right', label: started ? 'Continue' : 'Start pickup' };
+    }
+    if (b.status === 'CheckedOut' && !b.guestAcknowledgedAt && !b.guestSignature) {
+      return { to: `/Fleet/Collection/${b.id}`, icon: 'bi-pen', label: 'Review & sign' };
+    }
+    if (b.status === 'CheckedOut') {
+      return { to: '/Fleet/MyTrips', icon: 'bi-geo-alt', label: 'Track' };
+    }
+    return null;
+  };
+
+  const carRows = cars
+    .filter((b) => ['PendingConfirmation', 'Confirmed', 'CheckedOut'].includes(b.status))
+    .sort((a, b) => (a.pickupDate || '').localeCompare(b.pickupDate || ''))
+    .slice(0, 3);
 
   const checkIn = async (id) => {
     setCheckingIn(id);
@@ -222,6 +262,50 @@ export default function GuestDashboard() {
         </div>
 
         <div>
+          <div className="palm-card">
+            <div className="palm-card-header">
+              <span className="palm-card-title">Vehicle Collection</span>
+              {carRows.length > 0 && (
+                <Link to="/Fleet/Collection" className="palm-btn palm-btn-outline" style={{ padding: '0.4rem 0.75rem', fontSize: '0.76rem' }}>
+                  <i className="bi bi-box-arrow-right" />Fetch the Car
+                </Link>
+              )}
+            </div>
+            <div className="palm-card-body">
+              {carRows.length === 0 ? (
+                <div className="text-muted small py-3">
+                  <i className="bi bi-car-front me-2" />No active car pick-ups yet.
+                  <div className="mt-3"><Link to="/Fleet/Vehicles" className="palm-btn palm-btn-outline"><i className="bi bi-car-front" />Rent a Vehicle</Link></div>
+                </div>
+              ) : (
+                carRows.map((b) => {
+                  const d = carDue(b);
+                  const c = carCta(b);
+                  return (
+                    <div className="palm-dining-row" key={b.id}>
+                      <span className="palm-dining-thumb"><i className="bi bi-car-front" /></span>
+                      <div className="flex-grow-1">
+                        <div className="palm-dining-title">
+                          {b.vehicleName}{b.unitNumber ? ` · ${b.unitNumber}` : ''}
+                          <span className={`palm-status-chip ${d.tone}`}>{d.label}</span>
+                        </div>
+                        <div className="palm-dining-meta">Pick-up {formatGuestDate(b.pickupDate)} {b.pickupTime} · Ref {b.ref}</div>
+                      </div>
+                      {c && (
+                        <div className="palm-dining-actions">
+                          <Link to={c.to} className="palm-btn palm-btn-green">
+                            <i className={`bi ${c.icon}`} />{c.label}
+                          </Link>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+              {carRows.length > 0 && <Link to="/Fleet/Collection" className="palm-card-link">View all vehicle pick-ups for your stay →</Link>}
+            </div>
+          </div>
+
           <div className="palm-card">
             <div className="palm-card-header"><span className="palm-card-title">Guest Quick Actions</span></div>
             <div className="palm-card-body">

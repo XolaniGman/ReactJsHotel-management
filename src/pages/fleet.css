@@ -98,6 +98,11 @@
   color: #355f8c;
 }
 
+.fleet-badge-Rented {
+  background: #f0edff;
+  color: #5b51a8;
+}
+
 .fleet-pill-maintenance,
 .fleet-badge-InMaintenance {
   background: #fff6db;

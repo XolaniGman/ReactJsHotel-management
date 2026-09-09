@@ -7,12 +7,14 @@ import {
   getDocs,
   onSnapshot,
   query,
+  runTransaction,
   updateDoc,
+  where,
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { addBillItem } from './billService';
 import { nightsBetween, round, todayISO, addDaysISO } from '../lib/utils';
-import { DEPOSIT_AMOUNT, HIGH_RISK_EXTRA_HOLD, LATE_RETURN_GRACE_HOURS } from '../lib/constants';
+import { DEPOSIT_AMOUNT, HIGH_RISK_EXTRA_HOLD, LATE_RETURN_GRACE_HOURS, MIN_DRIVING_AGE } from '../lib/constants';
 import {
   dynamicRateMultiplier,
   additionalDriverFee,
@@ -27,6 +29,7 @@ import {
   accidentAdminFee,
   rentalCancellationPenalty,
   serviceCancellationPenalty,
+  ageFromDob,
 } from '../lib/fleetAlgo';
 
 const vehiclesCol = 'fleetVehicles';
@@ -321,6 +324,20 @@ export const getFleetVehicle = async (id) => {
   return null;
 };
 
+// A booking's `unitNumber` (the physically assigned unit, set at confirm/
+// reassign time) is the source of truth for "which vehicle" — `vehicleId`
+// can still point at the originally-quoted vehicle if a different unit was
+// assigned. Resolve by unitNumber first, falling back to vehicleId.
+export const getFleetVehicleForBooking = async (booking) => {
+  if (!booking) return null;
+  if (booking.unitNumber) {
+    const vehicles = await listFleetVehicles();
+    const byUnit = vehicles.find((v) => v.unitNumber === booking.unitNumber || v.plateNumber === booking.unitNumber);
+    if (byUnit) return byUnit;
+  }
+  return booking.vehicleId ? getFleetVehicle(booking.vehicleId) : null;
+};
+
 // ---------------- Realtime subscriptions ----------------
 
 const sortByName = (docs) => [...docs].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
@@ -602,7 +619,17 @@ export const getCarBooking = async (id) => {
   return snap.exists() ? { id, ...snap.data() } : null;
 };
 
-export const confirmCarBooking = async (id, { unitNumber, assignedBy, overrideNote }) => {
+export const subscribeCarBooking = (ids, cb) => {
+  const id = Array.isArray(ids) ? ids[0] : ids;
+  if (!id) return () => {};
+  return onSnapshot(
+    doc(db, bookingsCol, id),
+    (snap) => cb(snap.exists() ? { id: snap.id, ...snap.data() } : null),
+    (err) => console.error('carBooking listener error', err),
+  );
+};
+
+export const confirmCarBooking = async (id, { unitNumber, vehicleId, assignedBy, overrideNote }) => {
   const booking = await getCarBooking(id);
   if (!booking) return { error: 'Booking not found.' };
   if (booking.riskFlag && !booking.riskOverrideBy && !overrideNote?.trim()) {
@@ -614,11 +641,13 @@ export const confirmCarBooking = async (id, { unitNumber, assignedBy, overrideNo
     status: 'Confirmed',
     confirmedAt: Date.now(),
   };
+  if (vehicleId) patch.vehicleId = vehicleId;
   if (booking.riskFlag) {
     patch.riskOverrideBy = assignedBy || 'Front Desk';
     patch.riskOverrideNote = overrideNote?.trim() || '';
   }
   await updateDoc(doc(db, bookingsCol, id), patch);
+  if (vehicleId) await setVehicleStatus(vehicleId, 'Reserved');
   await logBookingHistory(
     id,
     'Confirmed',
@@ -984,6 +1013,7 @@ export const recordVehicleHandover = async ({
   photos,
   signedBy,
   guestSignature,
+  guestSignsOnPhone = false,
   reservationId,
   damageCheck,
   returnBranchId,
@@ -1001,9 +1031,23 @@ export const recordVehicleHandover = async ({
     return { error: `This rental cannot be checked in while it is ${bookingDisplay(booking.status)}.` };
   }
 
+  // Three check-out gates, enforced here (not just by disabled UI buttons) so
+  // they hold even if this function is invoked directly.
   if (handoverType === 'CheckOut') {
-    if (!guestSignature?.trim()) {
-      return { error: 'Guest co-signature is required before handover.' };
+    if (!['Verified', 'Overridden'].includes(booking.licenceVerification?.status)) {
+      return { error: 'Licence verification must pass (or be explicitly overridden with a logged reason) before check-out.' };
+    }
+    const damagedItem = (items || []).find((i) => i?.condition === 'Damaged');
+    if (damagedItem) {
+      return {
+        error: `Pre-existing damage marked (${damagedItem.label || damagedItem.name || 'item'}) — this unit is not roadworthy. Handover is blocked; return to Front Desk to reassign a different vehicle.`,
+      };
+    }
+    if (!signedBy?.trim()) {
+      return { error: 'Staff signed-by name is required.' };
+    }
+    if (!guestSignature?.trim() && !guestSignsOnPhone) {
+      return { error: 'Guest co-signature is required, or mark that the guest will sign on their own phone.' };
     }
   }
 
@@ -1036,18 +1080,31 @@ export const recordVehicleHandover = async ({
         extraHoldNote = `High-risk branch — extra hold of R${HIGH_RISK_EXTRA_HOLD} applied`;
       }
     }
+    const agreementIssuedAt = Date.now();
     await updateDoc(doc(db, bookingsCol, bookingId), {
       status: 'CheckedOut',
       handoverOut: { id: ref.id, fuelLevel: Number(fuelLevel), mileage: Number(mileage), at: Date.now() },
       authorisationHoldAmount,
-      guestSignature,
+      guestSignature: guestSignature || booking.guestSignature || '',
+      ...(guestSignature?.trim()
+        ? { guestAcknowledgedAt: Date.now() }
+        : {}),
+      collectionProgress: {
+        step: guestSignature?.trim() ? 'complete' : 'signature',
+        stepUpdatedAt: Date.now(),
+      },
+      agreementIssuedAt,
+      checkoutLock: null,
     });
+    const rentedVehicle = await getFleetVehicleForBooking({ ...booking, unitNumber });
+    if (rentedVehicle?.id) await setVehicleStatus(rentedVehicle.id, 'Rented');
     await logBookingHistory(
       bookingId,
       'CheckedOut',
       signedBy,
-      `Vehicle handed out · fuel ${fuelLevel}% · ${mileage} km${extraHoldNote ? ` · ${extraHoldNote}` : ''}`,
+      `Vehicle handed out · fuel ${fuelLevel}% · ${mileage} km${extraHoldNote ? ` · ${extraHoldNote}` : ''}${guestSignature?.trim() ? '' : ' · guest will sign on their phone'} · rental agreement & gate pass generated`,
     );
+    return { id: ref.id, agreementIssuedAt };
   } else {
     const out = booking?.handoverOut || {};
     const variance = {
@@ -1105,7 +1162,8 @@ export const recordVehicleHandover = async ({
     // UC15: the vehicle stays UNAVAILABLE until the post-rental inspection is completed
     // (finalized later → Available or InMaintenance). Repairs queued from damage already
     // have a work order created below while the unit waits for inspection.
-    if (booking?.vehicleId) await setVehicleStatus(booking.vehicleId, 'PendingInspection');
+    const returnedVehicle = await getFleetVehicleForBooking({ ...booking, unitNumber });
+    if (returnedVehicle?.id) await setVehicleStatus(returnedVehicle.id, 'PendingInspection');
     await logBookingHistory(bookingId, 'PendingInspection', signedBy, `Vehicle re-checked · return ${late.status} (${late.elapsedHours}h vs scheduled) · fuel ${fuelLevel}% · ${mileage} km · ${pendingCharges.length} item(s) held for review · awaiting post-rental inspection`);
 
     // Damage detected → automatically open a repair work order so the damage is
@@ -1134,7 +1192,6 @@ export const recordVehicleHandover = async ({
     }
     return { id: ref.id, damageDetected, damageDetails: variance.damages, workOrder, finalizedCharges: pendingCharges, returnTiming };
   }
-  return { id: ref.id };
 };
 
 // UC15 step 7 → 8: the Post-Rental Inspection is completed by staff. Booking is
@@ -1172,6 +1229,197 @@ export const listVehicleHandovers = async () => {
   return snap.docs
     .map((d) => ({ id: d.id, ...d.data() }))
     .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+};
+
+// ---------------- Guest vehicle collection flow ----------------
+export const COLLECTION_STEPS = ['prep', 'arrived', 'verification', 'inspection', 'signature', 'complete'];
+export const collectionStepLabel = (step) => ({
+  prep: 'Ready for pick-up',
+  arrived: 'Guest arrived',
+  verification: 'Licence verification',
+  inspection: 'Vehicle inspection',
+  signature: 'Awaiting your signature',
+  complete: 'Keys issued',
+}[step] || 'Ready for pick-up');
+
+export const markGuestArrived = async (bookingId) => {
+  const booking = await getCarBooking(bookingId);
+  if (!booking) return { error: 'Booking not found.' };
+  await updateDoc(doc(db, bookingsCol, bookingId), {
+    guestArrived: true,
+    guestArrivedAt: Date.now(),
+    collectionProgress: { step: 'arrived', arrivedAt: Date.now(), stepUpdatedAt: Date.now() },
+  });
+  await logBookingHistory(bookingId, booking.status, 'Guest', 'Guest arrived for vehicle collection');
+  return { ok: true };
+};
+
+export const updateHandoverStep = async (bookingId, step) => {
+  await updateDoc(doc(db, bookingsCol, bookingId), {
+    collectionProgress: { step, stepUpdatedAt: Date.now() },
+  });
+};
+
+export const getHandoverForBooking = async (bookingId) => {
+  const snap = await getDocs(query(collection(db, handoversCol), where('bookingId', '==', bookingId)));
+  const docs = snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  return docs[0] || null;
+};
+
+export const subscribeHandoverForBooking = (bookingId, cb) => {
+  if (!bookingId) return () => {};
+  return onSnapshot(
+    query(collection(db, handoversCol), where('bookingId', '==', bookingId)),
+    (snap) => {
+      const docs = snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+      cb(docs[0] || null);
+    },
+    (err) => console.error('handover listener error', err),
+  );
+};
+
+export const submitGuestSignature = async (bookingId, { signatureText }) => {
+  const booking = await getCarBooking(bookingId);
+  if (!booking) return { error: 'Booking not found.' };
+  const handover = await getHandoverForBooking(bookingId);
+  if (!handover) return { error: 'No handover record found yet — the front desk is still completing the vehicle inspection.' };
+  const trimmed = (signatureText || '').trim();
+  if (!trimmed) return { error: 'Signature is required.' };
+  const stamp = Date.now();
+  await updateDoc(doc(db, handoversCol, handover.id), {
+    guestSignature: trimmed,
+    guestAcknowledgedAt: stamp,
+  });
+  await updateDoc(doc(db, bookingsCol, bookingId), {
+    collectionProgress: { step: 'complete', stepUpdatedAt: stamp },
+    guestSignature: trimmed,
+    guestAcknowledgedAt: stamp,
+  });
+  await logBookingHistory(bookingId, 'CheckedOut', 'Guest', 'Vehicle collection acknowledged — guest signed digitally');
+  return { ok: true, signedAt: stamp };
+};
+
+// ---------------- Licence verification (check-out gate 1) ----------------
+// No external verification provider is integrated (no backend to hold
+// credentials) — these are real local checks (expiry, minimum age, required
+// fields) that the UI wraps in a simulated "contacting verification
+// service…" delay, matching how Stripe is simulated elsewhere in this app.
+
+export const verifyDriverLicence = async (bookingId, { checkedBy } = {}) => {
+  const booking = await getCarBooking(bookingId);
+  if (!booking) return { error: 'Booking not found.' };
+  const reasons = [];
+  if (!booking.licenseNumber?.trim()) reasons.push('No licence number on file.');
+  if (!booking.licenseExpiry) {
+    reasons.push('No licence expiry date on file.');
+  } else if (new Date(`${booking.licenseExpiry}T23:59:59`) < new Date()) {
+    reasons.push(`Licence expired on ${booking.licenseExpiry}.`);
+  }
+  const age = ageFromDob(booking.driverDob);
+  if (age == null) {
+    reasons.push('Driver date of birth not on file — cannot confirm minimum age.');
+  } else if (age < MIN_DRIVING_AGE) {
+    reasons.push(`Driver is ${age} — below the minimum driving age of ${MIN_DRIVING_AGE}.`);
+  }
+  const status = reasons.length === 0 ? 'Verified' : 'Failed';
+  const licenceVerification = {
+    status,
+    checkedAt: Date.now(),
+    checkedBy: checkedBy || 'Front Desk',
+    reasons,
+  };
+  await updateDoc(doc(db, bookingsCol, bookingId), { licenceVerification });
+  await logBookingHistory(
+    bookingId,
+    booking.status,
+    checkedBy || 'Front Desk',
+    status === 'Verified' ? 'Licence verification passed' : `Licence verification failed — ${reasons.join(' ')}`,
+  );
+  return { ok: true, licenceVerification };
+};
+
+export const overrideLicenceVerification = async (bookingId, { by, note }) => {
+  const trimmed = (note || '').trim();
+  if (!trimmed) return { error: 'An override reason is required and will be logged.' };
+  const booking = await getCarBooking(bookingId);
+  if (!booking) return { error: 'Booking not found.' };
+  const licenceVerification = {
+    ...(booking.licenceVerification || {}),
+    status: 'Overridden',
+    overrideBy: by || 'Front Desk',
+    overrideNote: trimmed,
+    overrideAt: Date.now(),
+  };
+  await updateDoc(doc(db, bookingsCol, bookingId), { licenceVerification });
+  await logBookingHistory(bookingId, booking.status, by || 'Front Desk', `Licence verification overridden — ${trimmed}`);
+  return { ok: true, licenceVerification };
+};
+
+// ---------------- Check-out concurrency lock ----------------
+// Last-write-wins after a visible staleness window, with an explicit
+// "take over" action rather than a silent overwrite — avoids two staff
+// members quietly clobbering each other's handover progress.
+
+const CHECKOUT_LOCK_STALE_MS = 10 * 60 * 1000;
+
+export const acquireCheckoutLock = async (bookingId, { by, uid, force = false } = {}) => {
+  try {
+    return await runTransaction(db, async (tx) => {
+      const ref = doc(db, bookingsCol, bookingId);
+      const snap = await tx.get(ref);
+      if (!snap.exists()) return { error: 'Booking not found.' };
+      const existing = snap.data().checkoutLock;
+      const isStale = existing?.at && Date.now() - existing.at > CHECKOUT_LOCK_STALE_MS;
+      if (existing && existing.uid !== uid && !isStale && !force) {
+        return { error: 'Locked by another staff member.', lockedBy: existing.by, lockedAt: existing.at };
+      }
+      const lock = { by: by || 'Front Desk', uid: uid || '', at: Date.now() };
+      tx.update(ref, { checkoutLock: lock });
+      return { ok: true, lock };
+    });
+  } catch {
+    return { error: 'Could not acquire the check-out lock — please retry.' };
+  }
+};
+
+export const releaseCheckoutLock = (bookingId) =>
+  updateDoc(doc(db, bookingsCol, bookingId), { checkoutLock: null }).catch(() => {});
+
+// ---------------- Reassign vehicle after a damage-gate block ----------------
+// Keeps the booking Confirmed on a different unit without losing the
+// guest's already-captured licence data (which lives on the booking, not
+// the vehicle or handover record).
+
+export const reassignBookingVehicle = async (bookingId, { vehicleId, unitNumber, by }) => {
+  const booking = await getCarBooking(bookingId);
+  if (!booking) return { error: 'Booking not found.' };
+  if (booking.status !== 'Confirmed') {
+    return { error: `This booking is ${bookingDisplay(booking.status)} — it can only be reassigned while Confirmed.` };
+  }
+  const newVehicle = await getFleetVehicle(vehicleId);
+  if (!newVehicle) return { error: 'Replacement vehicle not found.' };
+  if (newVehicle.status !== 'Available') {
+    return { error: `${newVehicle.unitNumber || newVehicle.name} is ${newVehicle.status} — pick an available unit.` };
+  }
+  const oldVehicle = await getFleetVehicleForBooking(booking);
+  await updateDoc(doc(db, bookingsCol, bookingId), {
+    vehicleId,
+    vehicleName: newVehicle.name,
+    vehicleImage: newVehicle.image || '',
+    unitNumber: unitNumber || newVehicle.unitNumber || newVehicle.plateNumber || '',
+    notRoadworthySwap: true,
+    replacementVehicleId: vehicleId,
+    replacementVehicleName: newVehicle.name,
+  });
+  await setVehicleStatus(vehicleId, 'Reserved');
+  if (oldVehicle?.id && oldVehicle.id !== vehicleId) await setVehicleStatus(oldVehicle.id, 'Available');
+  await logBookingHistory(
+    bookingId,
+    'Confirmed',
+    by || 'Front Desk',
+    `Reassigned to ${newVehicle.name} (${newVehicle.unitNumber || newVehicle.plateNumber}) — pre-existing damage found on the previous unit at check-out`,
+  );
+  return { ok: true, vehicleId, vehicleName: newVehicle.name, unitNumber: unitNumber || newVehicle.unitNumber };
 };
 
 // ---------------- Charges & payments ----------------
@@ -1232,16 +1480,16 @@ export const reviewPendingCharge = async (bookingId, itemId, { action, by, note 
   return { error: `Unknown action ${action}.` };
 };
 
-export const recordBookingPayment = async (bookingId, { amount, byName }) => {
+export const recordBookingPayment = async (bookingId, { amount, byName, method = 'Manual' }) => {
   const booking = await getCarBooking(bookingId);
   if (!booking) return { error: 'Booking not found.' };
   const paidAmount = round((booking.paidAmount || 0) + Number(amount));
-  await updateDoc(doc(db, bookingsCol, bookingId), { paidAmount });
+  await updateDoc(doc(db, bookingsCol, bookingId), { paidAmount, paymentMethod: method });
   await logBookingHistory(
     bookingId,
     booking.status,
     byName || 'Billing',
-    `Payment of ${amount} recorded`,
+    `Payment of R${amount} recorded via ${method}`,
   );
   return { ok: true, paidAmount };
 };

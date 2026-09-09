@@ -1,11 +1,23 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { getCarBooking, recordVehicleHandover, getFleetVehicle } from '../services/fleetService';
+import {
+  getCarBooking,
+  subscribeCarBooking,
+  recordVehicleHandover,
+  getFleetVehicleForBooking,
+  listFleetVehicles,
+  updateHandoverStep,
+  verifyDriverLicence,
+  overrideLicenceVerification,
+  acquireCheckoutLock,
+  releaseCheckoutLock,
+  reassignBookingVehicle,
+} from '../services/fleetService';
 import { listVehicleHandovers } from '../services/fleetService';
 import DamageCompare from '../components/DamageCompare';
 import CarViewer3D from '../components/CarViewer3D';
-import { formatPrice, formatGuestDate, fileToDataUrl, round } from '../lib/utils';
+import { formatPrice, formatGuestDate, formatDateTime, fileToDataUrl, round } from '../lib/utils';
 import { HANDOVER_ITEMS, FLEET_BRANCHES, HIGH_RISK_EXTRA_HOLD } from '../lib/constants';
 import { branchById, lateReturnCharges, fuelVarianceCharge, oneWayFee } from '../lib/fleetAlgo';
 import './guest.css';
@@ -14,6 +26,8 @@ import './fleet.css';
 
 const defaultItems = () =>
   HANDOVER_ITEMS.map((label) => ({ label, condition: 'Good', damaged: false }));
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export default function FleetHandover() {
   const { id } = useParams();
@@ -37,32 +51,120 @@ export default function FleetHandover() {
   const [waiveNote, setWaiveNote] = useState('');
   const [returnBranchId, setReturnBranchId] = useState('');
   const [vehicle, setVehicle] = useState(null);
+  const [guestSignsOnPhone, setGuestSignsOnPhone] = useState(() => false);
+  const [agreementIssuedAt, setAgreementIssuedAt] = useState(null);
+
+  // ---- Gate 1: licence verification (simulated service, real local checks) ----
+  const [licenceChecking, setLicenceChecking] = useState(false);
+  const [overrideNote, setOverrideNote] = useState('');
+  const [showOverride, setShowOverride] = useState(false);
+
+  // ---- Gate 2 fallout: reassign a different unit after a damage block ----
+  const [allVehicles, setAllVehicles] = useState([]);
+  const [reassignVehicleId, setReassignVehicleId] = useState('');
+  const [reassigning, setReassigning] = useState(false);
+
+  // ---- Concurrency lock ----
+  const [lockInfo, setLockInfo] = useState(null);
 
   const out = booking?.handoverOut;
 
   useEffect(() => {
+    const unsub = subscribeCarBooking(id, setBooking);
     (async () => {
+      setHandovers(await listVehicleHandovers());
+      setAllVehicles(await listFleetVehicles());
       const b = await getCarBooking(id);
-      setBooking(b);
       if (type === 'CheckIn' && b?.handoverOut) {
         setFuelLevel(b.handoverOut.fuelLevel ?? 100);
         setMileage(b.handoverOut.mileage ?? '');
         setReturnBranchId(b.returnBranchId || b.pickupBranchId || 'main');
       }
-      setHandovers(await listVehicleHandovers());
-      if (b?.vehicleId) setVehicle(await getFleetVehicle(b.vehicleId));
+      if (b) setVehicle(await getFleetVehicleForBooking(b));
+      if (type === 'CheckOut' && b?.status === 'Confirmed') {
+        updateHandoverStep(b.id, 'verification').catch(() => {});
+        acquireCheckoutLock(b.id, { by: user?.name, uid: user?.uid }).then(setLockInfo).catch(() => {});
+      }
     })();
+    return () => { if (typeof unsub === 'function') unsub(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, type]);
 
-  const setItem = (idx, patch) =>
+  useEffect(() => () => {
+    if (type === 'CheckOut') releaseCheckoutLock(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const takeOverLock = async () => {
+    const res = await acquireCheckoutLock(id, { by: user?.name, uid: user?.uid, force: true });
+    setLockInfo(res);
+  };
+
+  const licenceStatus = booking?.licenceVerification?.status || null;
+  const licenceGatePassed = licenceStatus === 'Verified' || licenceStatus === 'Overridden';
+
+  const runVerification = async () => {
+    setError('');
+    setLicenceChecking(true);
+    await sleep(1200);
+    const res = await verifyDriverLicence(id, { checkedBy: user?.name || 'Front Desk' });
+    setLicenceChecking(false);
+    if (res?.error) setError(res.error);
+    setShowOverride(false);
+    setOverrideNote('');
+  };
+
+  const submitOverride = async () => {
+    setError('');
+    if (!overrideNote.trim()) return setError('An override reason is required and will be logged.');
+    const res = await overrideLicenceVerification(id, { by: user?.name || 'Front Desk', note: overrideNote });
+    if (res?.error) return setError(res.error);
+    setShowOverride(false);
+    setOverrideNote('');
+  };
+
+  const hasDamage = type === 'CheckOut' && items.some((it) => it.condition === 'Damaged');
+
+  const doReassign = async () => {
+    setError('');
+    if (!reassignVehicleId) return setError('Choose a replacement vehicle first.');
+    setReassigning(true);
+    const res = await reassignBookingVehicle(id, { vehicleId: reassignVehicleId, by: user?.name || 'Front Desk' });
+    setReassigning(false);
+    if (res?.error) return setError(res.error);
+    setItems(defaultItems());
+    setPhotos([]);
+    setNotes('');
+    setDamageResult(null);
+    setMileage('');
+    setFuelLevel(100);
+    setReassignVehicleId('');
+    const freshBooking = await getCarBooking(id);
+    if (freshBooking) setVehicle(await getFleetVehicleForBooking(freshBooking));
+    setSuccess(`Reassigned to ${res.vehicleName} (${res.unitNumber}) — continue the inspection on the new unit.`);
+  };
+
+  const setItem = (idx, patch) => {
     setItems((prev) => prev.map((it, i) => (i === idx ? { ...it, ...patch } : it)));
+    if (type === 'CheckOut' && patch.condition) {
+      updateHandoverStep(id, 'inspection').catch(() => {});
+    }
+  };
 
   const onPhoto = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const data = await fileToDataUrl(file, 1000);
     setPhotos((prev) => [...prev, data]);
+    if (type === 'CheckOut') updateHandoverStep(id, 'inspection').catch(() => {});
   };
+
+  const canSubmit =
+    !submitting &&
+    mileage !== '' &&
+    Number(mileage) >= 0 &&
+    (type !== 'CheckOut' ||
+      (licenceGatePassed && !hasDamage && signedBy.trim() && (guestSignsOnPhone || guestSignature.trim())));
 
   const submit = async (e) => {
     e.preventDefault();
@@ -70,7 +172,9 @@ export default function FleetHandover() {
     setSuccess('');
     if (!booking) return;
     if (!mileage || Number(mileage) < 0) return setError('Please enter the current odometer reading.');
-    if (type === 'CheckOut' && !guestSignature.trim()) return setError('Guest co-signature is required before handover.');
+    if (type === 'CheckOut' && !licenceGatePassed) return setError('Licence verification must pass (or be overridden) before check-out.');
+    if (type === 'CheckOut' && hasDamage) return setError('Pre-existing damage marked — reassign a different vehicle before check-out.');
+    if (type === 'CheckOut' && !guestSignsOnPhone && !guestSignature.trim()) return setError('Guest co-signature is required, or choose “Guest signs on their phone”.');
     setSubmitting(true);
     const res = await recordVehicleHandover({
       bookingId: booking.id,
@@ -82,7 +186,8 @@ export default function FleetHandover() {
       notes,
       photos,
       signedBy: signedBy || user?.name || 'Front Desk',
-      guestSignature,
+      guestSignature: guestSignsOnPhone ? '' : guestSignature,
+      guestSignsOnPhone,
       reservationId: booking.reservationId || '',
       damageCheck: damageResult,
       returnBranchId,
@@ -91,17 +196,18 @@ export default function FleetHandover() {
     });
     setSubmitting(false);
     if (res?.error) return setError(res.error);
+    if (type === 'CheckOut') setAgreementIssuedAt(res.agreementIssuedAt || Date.now());
     setSuccess(
       type === 'CheckOut'
-        ? `Vehicle handed out. Guest signed the digital checklist. Booking is now Checked Out.`
+        ? guestSignsOnPhone
+          ? `Vehicle handed out. Booking is Checked Out — ${booking.guestName} can review & sign the condition report on their phone.`
+          : `Vehicle handed out. Guest signed the digital checklist. Booking is now Checked Out.`
         : res.returnTiming
           ? `Vehicle re-checked (return ${res.returnTiming.status.toLowerCase()}). Booking moved to Returned — Pending Inspection; the unit stays blocked until the post-rental inspection is completed.${res.damageDetected ? ` Work order ${res.workOrder?.ref || ''} queued for the workshop.` : ''} Charges are held for review before any posting.`
           : res.damageDetected
             ? `Vehicle re-checked and moved to maintenance because damage was detected.${res.workOrder ? ` Work order ${res.workOrder.ref} opened for the workshop.` : ''} Itemized charges are held for guest & staff review before posting.`
             : `Vehicle re-checked and returned to the available fleet. Itemized charges are held for guest & staff review before posting.`,
     );
-    const b = await getCarBooking(booking.id);
-    setBooking(b);
     setHandovers(await listVehicleHandovers());
   };
 
@@ -116,6 +222,8 @@ export default function FleetHandover() {
   const damages = (booking.variance?.damages) || [];
   const pickupBranch = branchById(booking.pickupBranchId);
   const isHighRiskPickup = type === 'CheckOut' && pickupBranch?.highRisk;
+  const lockedByOther = type === 'CheckOut' && lockInfo?.error && lockInfo?.lockedBy && lockInfo.lockedBy !== (user?.name || '');
+  const availableReplacements = allVehicles.filter((v) => v.status === 'Available' && v.id !== vehicle?.id);
 
   const checkInPreview =
     type === 'CheckIn'
@@ -149,6 +257,43 @@ export default function FleetHandover() {
         {error && <div className="lost-alert lost-alert-danger mb-3"><i className="bi bi-exclamation-triangle me-2" />{error}</div>}
         {success && <div className="lost-alert lost-alert-success mb-3"><i className="bi bi-check-circle me-2" />{success}</div>}
 
+        {lockedByOther && (
+          <div className="lost-alert lost-alert-warning mb-3 d-flex align-items-center justify-content-between flex-wrap gap-2">
+            <div>
+              <i className="bi bi-lock me-2" />
+              Being handled by <strong>{lockInfo.lockedBy}</strong> since {formatDateTime(lockInfo.lockedAt)}.
+            </div>
+            <button type="button" className="btn btn-sm btn-outline-dark" onClick={takeOverLock}>
+              <i className="bi bi-arrow-repeat me-1" />Take over
+            </button>
+          </div>
+        )}
+
+        {agreementIssuedAt && (
+          <div className="panel-card mb-3">
+            <div className="panel-header">
+              <h2><i className="bi bi-file-earmark-check me-2" />Rental agreement &amp; gate pass</h2>
+              <span className="panel-actions">Generated {formatDateTime(agreementIssuedAt)}</span>
+            </div>
+            <div className="p-3">
+              <div className="row g-2 text-muted small">
+                <div className="col-md-4"><strong className="text-dark d-block">Guest</strong>{booking.guestName}</div>
+                <div className="col-md-4"><strong className="text-dark d-block">Vehicle / unit</strong>{booking.vehicleName} · {booking.unitNumber}</div>
+                <div className="col-md-4"><strong className="text-dark d-block">Rental window</strong>{formatGuestDate(booking.pickupDate)} → {formatGuestDate(booking.dropoffDate)}</div>
+                <div className="col-md-4"><strong className="text-dark d-block">Staff signed by</strong>{signedBy || user?.name}</div>
+                <div className="col-md-4"><strong className="text-dark d-block">Guest signature</strong>{guestSignature || (guestSignsOnPhone ? 'Pending — guest will sign on phone' : '—')}</div>
+                <div className="col-md-4"><strong className="text-dark d-block">Booking ref</strong>{booking.ref}</div>
+              </div>
+              <button type="button" className="btn btn-sm btn-outline-secondary mt-3" onClick={() => window.print()}>
+                <i className="bi bi-printer me-1" />Print agreement
+              </button>
+              <div className="text-muted small mt-2">
+                <i className="bi bi-info-circle me-1" />Generated in-app — this demo has no email/SMS backend to deliver it automatically.
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="panel-card mb-4">
           <div className="panel-header">
             <h2>Booking {booking.ref}</h2>
@@ -180,6 +325,75 @@ export default function FleetHandover() {
             )}
           </div>
         </div>
+
+        {type === 'CheckOut' && (
+          <div className="panel-card mb-4">
+            <div className="panel-header">
+              <h2><i className="bi bi-person-badge me-2" />Licence verification</h2>
+              {licenceGatePassed ? (
+                <span className="fleet-badge fleet-badge-Available">
+                  <i className="bi bi-check-circle me-1" />{licenceStatus === 'Verified' ? 'VERIFIED' : 'OVERRIDDEN'}
+                </span>
+              ) : licenceStatus === 'Failed' ? (
+                <span className="fleet-badge fleet-badge-OutOfService"><i className="bi bi-x-circle me-1" />FAILED</span>
+              ) : (
+                <span className="fleet-badge fleet-badge-PendingConfirmation">PENDING</span>
+              )}
+            </div>
+            <div className="p-3">
+              <div className="row g-2 text-muted small mb-3">
+                <div className="col-md-4"><strong className="text-dark d-block">Licence number</strong>{booking.licenseNumber || '—'}</div>
+                <div className="col-md-4"><strong className="text-dark d-block">Expiry</strong>{booking.licenseExpiry || '—'}</div>
+                <div className="col-md-4"><strong className="text-dark d-block">Date of birth</strong>{booking.driverDob || '—'}</div>
+              </div>
+
+              {!licenceGatePassed && licenceStatus !== 'Failed' && (
+                <button type="button" className="btn-log" style={{ background: '#355f8c' }} disabled={licenceChecking} onClick={runVerification}>
+                  <i className={`bi ${licenceChecking ? 'bi-arrow-repeat spin' : 'bi-shield-check'} me-1`} />
+                  {licenceChecking ? 'Contacting verification service…' : 'Run verification'}
+                </button>
+              )}
+
+              {licenceStatus === 'Failed' && (
+                <div className="lost-alert lost-alert-danger">
+                  <div className="fw-bold mb-1"><i className="bi bi-x-circle me-2" />Verification failed</div>
+                  <ul className="mb-2 small">
+                    {(booking.licenceVerification?.reasons || []).map((r) => <li key={r}>{r}</li>)}
+                  </ul>
+                  {!showOverride ? (
+                    <div className="d-flex gap-2">
+                      <button type="button" className="btn btn-sm btn-outline-dark" disabled={licenceChecking} onClick={runVerification}>
+                        <i className="bi bi-arrow-repeat me-1" />Re-run verification
+                      </button>
+                      <button type="button" className="btn btn-sm btn-danger" onClick={() => setShowOverride(true)}>
+                        <i className="bi bi-pencil-square me-1" />Manual override
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="mt-2">
+                      <label className="book-label" htmlFor="OverrideNote">Override reason (required, logged)</label>
+                      <input id="OverrideNote" className="form-control book-input" value={overrideNote} onChange={(e) => setOverrideNote(e.target.value)} placeholder="e.g. Verification service unreachable — licence checked visually against booking name" />
+                      <div className="d-flex gap-2 mt-2">
+                        <button type="button" className="btn btn-sm btn-dark" onClick={submitOverride}>
+                          <i className="bi bi-check-lg me-1" />Override &amp; continue
+                        </button>
+                        <button type="button" className="btn btn-sm btn-outline-secondary" onClick={() => { setShowOverride(false); setOverrideNote(''); }}>Cancel</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {licenceGatePassed && (
+                <div className="text-muted small">
+                  {licenceStatus === 'Verified'
+                    ? `Verified by ${booking.licenceVerification?.checkedBy || 'Front Desk'} at ${formatDateTime(booking.licenceVerification?.checkedAt)}.`
+                    : `Overridden by ${booking.licenceVerification?.overrideBy || 'Front Desk'} — ${booking.licenceVerification?.overrideNote}`}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {vehicle?.image && (
           <div className="panel-card mb-4">
@@ -249,6 +463,24 @@ export default function FleetHandover() {
                   </table>
                 </div>
               </div>
+
+              {hasDamage && (
+                <div className="lost-alert lost-alert-danger mt-4">
+                  <div className="fw-bold mb-1"><i className="bi bi-exclamation-triangle me-2" />Pre-existing damage marked — this unit is not roadworthy</div>
+                  <p className="small mb-2">Handover is blocked; return to Front Desk to reassign a different vehicle to this booking.</p>
+                  <div className="d-flex gap-2 flex-wrap align-items-center">
+                    <select className="form-select form-select-sm" style={{ width: 260 }} value={reassignVehicleId} onChange={(e) => setReassignVehicleId(e.target.value)}>
+                      <option value="">Choose a replacement vehicle…</option>
+                      {availableReplacements.map((v) => (
+                        <option key={v.id} value={v.id}>{v.name} · {v.unitNumber || v.plateNumber}</option>
+                      ))}
+                    </select>
+                    <button type="button" className="btn btn-sm btn-dark" disabled={reassigning} onClick={doReassign}>
+                      <i className="bi bi-arrow-left-right me-1" />{reassigning ? 'Reassigning…' : 'Reassign vehicle'}
+                    </button>
+                  </div>
+                </div>
+              )}
 
               <div className="panel-card mt-4">
                 <div className="panel-header">
@@ -359,24 +591,43 @@ export default function FleetHandover() {
                       )}
                     </div>
                   )}
+                  {type === 'CheckOut' && !licenceGatePassed && (
+                    <div className="text-muted small mb-2"><i className="bi bi-lock me-1" />Complete licence verification above to unlock sign-off.</div>
+                  )}
                   <label className="book-label" htmlFor="SignedBy">Staff signed by</label>
                   <input id="SignedBy" className="form-control book-input" value={signedBy} onChange={(e) => setSignedBy(e.target.value)} placeholder="Front Desk" />
                   {type === 'CheckOut' && (
                     <>
                       <label className="book-label mt-3" htmlFor="GuestSignature">Guest signature (type full name)</label>
-                      <input id="GuestSignature" className="form-control book-input" value={guestSignature} onChange={(e) => setGuestSignature(e.target.value)} placeholder={booking.guestName} />
+                      <input id="GuestSignature" className="form-control book-input" disabled={guestSignsOnPhone} value={guestSignature} onChange={(e) => setGuestSignature(e.target.value)} placeholder={booking.guestName} />
+                      <div className="form-check mt-3">
+                        <input className="form-check-input" type="checkbox" id="GuestSignsOnPhone" checked={guestSignsOnPhone} onChange={(e) => { setGuestSignsOnPhone(e.target.checked); if (e.target.checked) setGuestSignature(''); }} />
+                        <label className="form-check-label" htmlFor="GuestSignsOnPhone">Guest will review &amp; sign the condition report on their own phone instead</label>
+                      </div>
+                      {guestSignature.trim() && guestSignature === booking.guestSignature && (
+                        <div className="text-muted small mt-2"><i className="bi bi-phone me-1" />Signature received live from the guest's device.</div>
+                      )}
                     </>
                   )}
                   <p className="task-sub mt-2"><i className="bi bi-pencil-square me-1" />Recording a {type === 'CheckOut' ? 'handover' : 'return'} checklist confirms that {type === 'CheckOut' ? 'the guest received' : 'the hotel received'} the vehicle in this condition.</p>
                   <button
                     type="submit"
                     className="book-submit mt-3 w-100"
-                    disabled={
-                      submitting
-                    }
+                    disabled={!canSubmit}
                   >
                     <i className="bi bi-clipboard-check me-2" />{submitting ? 'Saving…' : `Complete ${type === 'CheckOut' ? 'check-out' : 'check-in'}`}
                   </button>
+                  {type === 'CheckOut' && !canSubmit && !submitting && (
+                    <div className="text-muted small mt-2 text-center">
+                      Still needed: {[
+                        !licenceGatePassed && 'licence verification',
+                        hasDamage && 'resolve pre-existing damage',
+                        !signedBy.trim() && 'staff name',
+                        !(guestSignsOnPhone || guestSignature.trim()) && 'guest signature',
+                        (!mileage || Number(mileage) < 0) && 'odometer reading',
+                      ].filter(Boolean).join(' · ')}
+                    </div>
+                  )}
                   <div className="text-muted small mt-2 text-center">
                     {type === 'CheckIn' && 'Late, fuel and one-way charges are held for guest & staff review before posting.'}
                   </div>
