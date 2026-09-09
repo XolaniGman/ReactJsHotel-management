@@ -19,13 +19,13 @@ export default function FleetRent() {
   const [reservations, setReservations] = useState([]);
   const [pickupDate, setPickupDate] = useState(searchParams.get('pickup') || todayISO());
   const [dropoffDate, setDropoffDate] = useState(searchParams.get('dropoff') || addDaysISO(todayISO(), 1));
-  const [pickupTime, setPickupTime] = useState('10:00');
-  const [dropoffTime, setDropoffTime] = useState('10:00');
+  const [pickupTime, setPickupTime] = useState(searchParams.get('pickupTime') || '10:00');
+  const [dropoffTime, setDropoffTime] = useState(searchParams.get('dropoffTime') || '10:00');
   const [selectedAddons, setSelectedAddons] = useState([]);
   const [licenseNumber, setLicenseNumber] = useState('');
   const [licenseExpiry, setLicenseExpiry] = useState('');
   const [reservationId, setReservationId] = useState('');
-  const [notes, setNotes] = useState('');
+  const [notes, setNotes] = useState(searchParams.get('notes') || '');
   const [terms, setTerms] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');

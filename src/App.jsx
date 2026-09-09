@@ -54,6 +54,7 @@ import AdminRestaurantTables from './pages/AdminRestaurantTables';
 import AdminRestaurantReports from './pages/AdminRestaurantReports';
 import RestaurantManagerDashboard from './pages/RestaurantManagerDashboard';
 import FleetVehicles from './pages/FleetVehicles';
+import FleetVehicleDetails from './pages/FleetVehicleDetails';
 import FleetRent from './pages/FleetRent';
 import FleetService from './pages/FleetService';
 import FleetMyTrips from './pages/FleetMyTrips';
@@ -141,6 +142,7 @@ export default function App() {
                   <Route path="/Restaurant" element={<RestaurantMenu />} />
                   <Route path="/Restaurant/Reserve" element={<RestaurantReserve />} />
                   <Route path="/Fleet/Vehicles" element={<FleetVehicles />} />
+                  <Route path="/Fleet/Vehicles/Details/:id" element={<FleetVehicleDetails />} />
                   <Route path="/Amenities/Request" element={<Services />} />
                   <Route path="/Laundry" element={<Services />} />
                   <Route path="/Account/Login" element={<Login />} />

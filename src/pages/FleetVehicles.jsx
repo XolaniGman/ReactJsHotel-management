@@ -192,16 +192,16 @@ export default function FleetVehicles() {
             const mid = Math.ceil(features.length / 2);
             const colA = features.slice(0, mid);
             const colB = features.slice(mid);
-            const RowInner = (
-              <>
-                <div className="flv-image">
+            return (
+              <div key={v.id} className={`flv-row ${busy ? 'is-muted' : ''}`}>
+                <Link to={`/Fleet/Vehicles/Details/${v.id}`} className="flv-image">
                   <img src={v.image || DEFAULT_IMG} alt={v.name} loading="lazy" />
                   {busy && <span className={`fleet-badge fleet-badge-${v.status}`}>{v.status}</span>}
-                </div>
+                </Link>
                 <div className="flv-body">
                   <div className="flv-top">
                     <div>
-                      <h3>{v.name}</h3>
+                      <h3><Link to={`/Fleet/Vehicles/Details/${v.id}`}>{v.name}</Link></h3>
                       <div className="flv-stars">
                         {[0, 1, 2, 3, 4].map((i) => (
                           <i key={i} className={i < fullStars ? 'bi bi-star-fill' : 'bi bi-star'} />
@@ -235,15 +235,19 @@ export default function FleetVehicles() {
                       </div>
                     </>
                   )}
+
+                  <div className="flv-actions">
+                    <Link to={`/Fleet/Vehicles/Details/${v.id}`} className="san-btn-secondary">
+                      <i className="bi bi-eye me-1" /> View details
+                    </Link>
+                    {!busy && (
+                      <Link to={`/Fleet/Rent?vehicle=${v.id}&pickup=${pickupDate}&dropoff=${dropoffDate}`} className="san-btn-primary">
+                        <i className="bi bi-car-front me-1" /> Rent this vehicle
+                      </Link>
+                    )}
+                  </div>
                 </div>
-              </>
-            );
-            return busy ? (
-              <div key={v.id} className="flv-row is-muted">{RowInner}</div>
-            ) : (
-              <Link key={v.id} to={`/Fleet/Rent?vehicle=${v.id}&pickup=${pickupDate}&dropoff=${dropoffDate}`} className="flv-row">
-                {RowInner}
-              </Link>
+              </div>
             );
           })}
         </div>
@@ -269,7 +273,7 @@ export default function FleetVehicles() {
                         <div className="fpt-veh-cell">
                           <img src={v.image || DEFAULT_IMG} alt={v.name} loading="lazy" />
                           <div>
-                            <strong>{v.name}</strong>
+                            <strong><Link to={`/Fleet/Vehicles/Details/${v.id}`}>{v.name}</Link></strong>
                             <span>{v.category || v.type} · {v.transmission} · {v.capacity} seats</span>
                           </div>
                         </div>
@@ -307,7 +311,13 @@ export default function FleetVehicles() {
             return (
               <article key={v.id} className={`san-room-card ${busy ? 'is-muted' : ''}`}>
                 <div className="san-room-image">
-                  <img src={v.image || DEFAULT_IMG} alt={v.name} loading="lazy" />
+                  <Link
+                    to={`/Fleet/Vehicles/Details/${v.id}`}
+                    className="fleet-image-link"
+                    aria-label={`View details for ${v.name}`}
+                  >
+                    <img src={v.image || DEFAULT_IMG} alt={v.name} loading="lazy" />
+                  </Link>
                   <span className={`fleet-badge fleet-badge-${v.status}`}>{v.status}</span>
                   <span className="fleet-badge category-badge">{v.category || '—'}</span>
                 </div>
@@ -353,6 +363,9 @@ export default function FleetVehicles() {
                   </div>
 
                   <div className="san-room-actions">
+                    <Link to={`/Fleet/Vehicles/Details/${v.id}`} className="san-btn-secondary">
+                      <i className="bi bi-eye me-1" /> View details
+                    </Link>
                     {busy ? (
                       <span className="san-btn-secondary" style={{ cursor: 'not-allowed', opacity: 0.7 }}>
                         Currently unavailable
