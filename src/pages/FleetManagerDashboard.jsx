@@ -14,6 +14,8 @@ import {
   getFleetVehicle,
   listCarBookings,
   listCarServices,
+  listFleetIncidents,
+  listFleetWorkOrders,
 } from '../services/fleetService';
 import { formatPrice } from '../lib/utils';
 import { groupDailyCounts, projectSeries, movingAverage } from '../lib/fleetAlgo';
@@ -28,9 +30,11 @@ import {
   Tooltip,
   Legend,
 } from 'recharts';
+import HandoverRegister from '../components/HandoverRegister';
 import './maintenance.css';
 import './guest.css';
 import './fleet.css';
+import './palm.css';
 
 const EMPTY_VEHICLE = {
   name: '',
@@ -39,6 +43,10 @@ const EMPTY_VEHICLE = {
   transmission: 'Automatic',
   capacity: 4,
   pricePerDay: '',
+  pricePerHour: '',
+  pricePerMonth: '',
+  rating: '',
+  reviewCount: '',
   deposit: 500,
   fuelType: 'Petrol',
   unitNumber: '',
@@ -76,6 +84,15 @@ export default function FleetManagerDashboard() {
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [raw, setRaw] = useState(null);
+  const [queues, setQueues] = useState({ awaitingSignoff: 0, incidentsAwaitingGuest: 0 });
+  const [reportType, setReportType] = useState('utilization');
+  const [reportFilters, setReportFilters] = useState({
+    from: '',
+    to: '',
+    category: 'All',
+    status: 'All',
+    branch: 'All',
+  });
 
   const load = async () => {
     const [r, v, d] = await Promise.all([fleetReports(), listFleetVehicles(), listFleetDrivers()]);
@@ -86,8 +103,30 @@ export default function FleetManagerDashboard() {
 
   useEffect(() => {
     (async () => {
-      const [b, s] = await Promise.all([listCarBookings(), listCarServices()]);
-      setRaw({ bookings: Array.isArray(b) ? b : [], services: Array.isArray(s) ? s : [] });
+      const [b, s, incidents, workOrders] = await Promise.all([
+        listCarBookings(),
+        listCarServices(),
+        listFleetIncidents(),
+        listFleetWorkOrders(),
+      ]);
+      setRaw({
+        bookings: Array.isArray(b) ? b : [],
+        services: Array.isArray(s) ? s : [],
+        incidents: Array.isArray(incidents) ? incidents : [],
+        workOrders: Array.isArray(workOrders) ? workOrders : [],
+      });
+    })();
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      const [incidents, workOrders] = await Promise.all([listFleetIncidents(), listFleetWorkOrders()]);
+      setQueues({
+        awaitingSignoff:
+          workOrders.filter((w) => w.status === 'AwaitingApproval').length +
+          incidents.filter((i) => i.escalationTier === 'FleetManager+HotelManager' && i.status !== 'Resolved').length,
+        incidentsAwaitingGuest: incidents.filter((i) => i.status === 'PendingGuestReview').length,
+      });
     })();
   }, []);
 
@@ -113,6 +152,10 @@ useEffect(() => {
             transmission: v.transmission || 'Automatic',
             capacity: v.capacity || 4,
             pricePerDay: v.pricePerDay || '',
+            pricePerHour: v.pricePerHour || '',
+            pricePerMonth: v.pricePerMonth || '',
+            rating: v.rating || '',
+            reviewCount: v.reviewCount || '',
             deposit: v.deposit || 500,
             fuelType: v.fuelType || 'Petrol',
             unitNumber: v.unitNumber || '',
@@ -149,6 +192,10 @@ useEffect(() => {
       ...vehicleForm,
       capacity: Number(vehicleForm.capacity) || 4,
       pricePerDay: Number(vehicleForm.pricePerDay) || 0,
+      pricePerHour: Number(vehicleForm.pricePerHour) || 0,
+      pricePerMonth: Number(vehicleForm.pricePerMonth) || 0,
+      rating: Number(vehicleForm.rating) || 0,
+      reviewCount: Number(vehicleForm.reviewCount) || 0,
       deposit: Number(vehicleForm.deposit) || 500,
       year: Number(vehicleForm.year) || new Date().getFullYear(),
       mileage: Number(vehicleForm.mileage) || 0,
@@ -213,14 +260,6 @@ useEffect(() => {
     return [...known, ...extra].filter((g) => g.items.length > 0);
   }, [vehicles]);
 
-  const grades = useMemo(() => {
-    if (!reports) return [];
-    const maxTrips = Math.max(1, ...reports.driverPerformance.map((d) => d.trips || 0));
-    return reports.driverPerformance
-      .map((d) => ({ ...d, grade: d.trips === 0 ? 'No trips' : d.trips >= maxTrips * 0.6 ? 'Strong' : d.trips >= maxTrips * 0.3 ? 'Steady' : 'Building' }))
-      .sort((a, b) => (b.trips || 0) - (a.trips || 0));
-  }, [reports]);
-
   const prediction = useMemo(() => {
     if (!raw) return null;
     const totalDaily = groupDailyCounts([...(raw.bookings || []), ...(raw.services || [])], { days: 28 });
@@ -238,6 +277,55 @@ useEffect(() => {
     return { rows, slope: fit.slope, r2: fit.r2, forecastSum, today, peak: counts.length ? Math.max(...counts) : 0 };
   }, [raw]);
 
+  const reportData = useMemo(() => {
+    if (!raw) return null;
+    const from = reportFilters.from ? new Date(`${reportFilters.from}T00:00:00`).getTime() : 0;
+    const to = reportFilters.to ? new Date(`${reportFilters.to}T23:59:59`).getTime() : Number.MAX_SAFE_INTEGER;
+    const vehicleMatches = (vehicle) => (
+      vehicle &&
+      (reportFilters.category === 'All' || vehicle.category === reportFilters.category || vehicle.type === reportFilters.category) &&
+      (reportFilters.status === 'All' || vehicle.status === reportFilters.status) &&
+      (reportFilters.branch === 'All' || vehicle.branchId === reportFilters.branch)
+    );
+    const dateMatches = (value) => {
+      const timestamp = typeof value === 'number' ? value : new Date(value || 0).getTime();
+      return timestamp >= from && timestamp <= to;
+    };
+    const filteredVehicles = vehicles.filter(vehicleMatches);
+    const filteredBookings = raw.bookings.filter((booking) => {
+      const vehicle = vehicles.find((item) => item.id === booking.vehicleId || item.unitNumber === booking.unitNumber);
+      return dateMatches(booking.createdAt || booking.confirmedAt || booking.pickupDate) && vehicleMatches(vehicle);
+    });
+    const filteredServices = raw.services.filter((service) => dateMatches(service.createdAt || service.pickupDate));
+    const filteredIncidents = raw.incidents.filter((incident) => dateMatches(incident.createdAt || incident.occurredAt));
+    const filteredWorkOrders = raw.workOrders.filter((order) => dateMatches(order.createdAt) && (!order.vehicleId || filteredVehicles.some((vehicle) => vehicle.id === order.vehicleId)));
+    const rentedDays = filteredBookings.reduce((sum, booking) => sum + (Number(booking.days) || 0), 0);
+    const availableDays = Math.max(1, filteredVehicles.length) * Math.max(1, reportFilters.from && reportFilters.to ? Math.ceil((to - from) / 86400000) : 30);
+    const rentalRevenue = filteredBookings.reduce((sum, booking) => sum + (Number(booking.finalCharges) || Number(booking.estimatedTotal) || 0), 0);
+    const shuttleRevenue = filteredServices.filter((service) => service.status === 'Completed').reduce((sum, service) => sum + (Number(service.confirmedBookingAmount) || Number(service.estimatedFare) || 0), 0);
+    const classBreakdown = filteredVehicles.map((vehicle) => ({
+      label: vehicle.category || vehicle.type || 'Other',
+      rented: filteredBookings.filter((booking) => booking.vehicleId === vehicle.id).reduce((sum, booking) => sum + (Number(booking.days) || 0), 0),
+      vehicles: 1,
+    })).reduce((result, item) => {
+      const current = result.find((entry) => entry.label === item.label);
+      if (current) { current.rented += item.rented; current.vehicles += 1; } else result.push(item);
+      return result;
+    }, []);
+    return {
+      filteredVehicles,
+      filteredBookings,
+      filteredServices,
+      filteredIncidents,
+      filteredWorkOrders,
+      rentedDays,
+      utilization: Math.min(100, Math.round((rentedDays / availableDays) * 100)),
+      rentalRevenue,
+      shuttleRevenue,
+      classBreakdown,
+    };
+  }, [raw, vehicles, reportFilters]);
+
   if (!reports) {
     return (
       <div className="maint-dash-bg"><div className="maint-dash">
@@ -247,28 +335,53 @@ useEffect(() => {
   }
 
   return (
-    <div className="maint-dash-bg">
+    <div className="maint-dash-bg palm-page fleet-manager-page">
       <div className="maint-dash">
-        <div className="maint-top">
-          <div>
-            <div className="maint-kicker">Fleet Manager · Reports &amp; Fleet</div>
-            <h1 className="maint-title">Fleet Manager {tab === 'overview' ? 'Overview' : tab === 'reports' ? 'Report' : tab === 'vehicles' ? '· Vehicles Hub' : tab === 'predictions' ? '· Predictions' : '· Drivers'}</h1>
+        <div
+          className="palm-hero fleet-manager-hero"
+          style={{ backgroundImage: "url('https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?auto=format&fit=crop&w=1600&q=80')" }}
+        >
+          <div className="palm-hero-badges">
+            <span className="palm-hero-pill status"><i className="bi bi-circle-fill me-1" />Fleet operations</span>
+            <span className="palm-hero-pill">{vehicles.length} vehicles · {drivers.length} drivers</span>
           </div>
-          <div className="d-flex gap-2">
-            <Link to="/Fleet/Incidents" className="btn-log" style={{ background: '#7a251b' }}><i className="bi bi-bug me-2" />Incidents</Link>
-            <Link to="/Fleet/Maintenance" className="btn-log" style={{ background: '#433c7d' }}><i className="bi bi-wrench-adjustable me-2" />Work Orders</Link>
-            <Link to="/Fleet/Dashboard" className="btn-log" style={{ background: '#355f8c' }}><i className="bi bi-kanban me-2" />Fleet Ops</Link>
-            <Link to="/Fleet/Charges" className="btn-log" style={{ background: '#775a19' }}><i className="bi bi-credit-card me-2" />Charges</Link>
+          <div className="palm-hero-body">
+            <div className="palm-hero-kicker">Fleet Manager · Reports &amp; Fleet</div>
+            <h1 className="palm-hero-title">Keep every journey moving</h1>
+            <p className="palm-hero-copy">
+              Monitor availability, revenue, drivers, and service readiness from one calm operational view.
+            </p>
+            <div className="palm-hero-actions">
+              <button type="button" className="palm-btn palm-btn-primary" onClick={() => changeTab('vehicles')}>
+                <i className="bi bi-car-front" />Manage Fleet
+              </button>
+              <button type="button" className="palm-btn palm-btn-light" onClick={() => changeTab('reports')}>
+                <i className="bi bi-bar-chart" />View Reports
+              </button>
+              <Link to="/Fleet/Incidents" className="palm-hero-link">Review incidents →</Link>
+            </div>
           </div>
         </div>
 
-        {notice && <div className="lost-alert lost-alert-success mb-3"><i className="bi bi-check-circle me-2" />{notice}</div>}
-        {error && <div className="lost-alert lost-alert-danger mb-3"><i className="bi bi-exclamation-triangle me-2" />{error}</div>}
+        <div className="palm-page-header fleet-manager-subheader">
+          <div>
+            <div className="palm-page-kicker">Fleet workspace</div>
+            <h2 className="palm-page-title">{tab === 'overview' ? 'Overview' : tab === 'reports' ? 'Reports' : tab === 'vehicles' ? 'Vehicles Hub' : tab === 'predictions' ? 'Predictions' : tab === 'handovers' ? 'Handovers' : 'Drivers'}</h2>
+          </div>
+          <div className="d-flex gap-2 flex-wrap">
+            <Link to="/Fleet/Maintenance" className="palm-btn palm-btn-outline"><i className="bi bi-wrench-adjustable" />Work Orders</Link>
+            <Link to="/Fleet/Dashboard" className="palm-btn palm-btn-outline"><i className="bi bi-kanban" />Fleet Ops</Link>
+            <Link to="/Fleet/Charges" className="palm-btn palm-btn-outline"><i className="bi bi-credit-card" />Charges</Link>
+          </div>
+        </div>
 
-        <div className="d-flex gap-2 mb-3 flex-wrap">
-          {[['overview', 'Overview', 'bi-speedometer2'], ['reports', 'Reports', 'bi-graph-up'], ['predictions', 'Predictions', 'bi-graph-up-arrow'], ['vehicles', 'Vehicles Hub', 'bi-car-front'], ['drivers', 'Drivers', 'bi-person-badge']].map(([key, label, icon]) => (
-            <button key={key} type="button" className={`lux-btn ${tab === key ? 'lux-btn-solid' : 'lux-btn-outline'}`} onClick={() => changeTab(key)}>
-              <i className={`bi ${icon} me-2`} />{label}
+        {notice && <div className="palm-alert palm-alert-success"><i className="bi bi-check-circle" />{notice}</div>}
+        {error && <div className="palm-alert palm-alert-danger"><i className="bi bi-exclamation-triangle" />{error}</div>}
+
+        <div className="palm-tabs">
+          {[['overview', 'Overview', 'bi-speedometer2'], ['reports', 'Reports', 'bi-graph-up'], ['predictions', 'Predictions', 'bi-graph-up-arrow'], ['handovers', 'Handovers', 'bi-arrow-left-right'], ['vehicles', 'Vehicles Hub', 'bi-car-front'], ['drivers', 'Drivers', 'bi-person-badge']].map(([key, label, icon]) => (
+            <button key={key} type="button" className={`palm-tab ${tab === key ? 'active' : ''}`} onClick={() => changeTab(key)}>
+              <i className={`bi ${icon} me-1`} />{label}
             </button>
           ))}
         </div>
@@ -291,6 +404,21 @@ useEffect(() => {
                 </div>
               ))}
             </div>
+
+            {(queues.awaitingSignoff > 0 || queues.incidentsAwaitingGuest > 0) && (
+              <div className="d-flex gap-2 flex-wrap mb-3">
+                {queues.awaitingSignoff > 0 && (
+                  <Link to="/Fleet/Maintenance" className="fleet-flag fleet-flag-warn text-decoration-none">
+                    <i className="bi bi-lock me-1" />{queues.awaitingSignoff} item(s) awaiting Hotel Manager sign-off
+                  </Link>
+                )}
+                {queues.incidentsAwaitingGuest > 0 && (
+                  <Link to="/Fleet/Incidents" className="fleet-flag fleet-flag-warn text-decoration-none">
+                    <i className="bi bi-hourglass-split me-1" />{queues.incidentsAwaitingGuest} incident(s) awaiting guest response
+                  </Link>
+                )}
+              </div>
+            )}
 
             <div className="dashboard-grid">
               <div className="panel-card">
@@ -330,7 +458,7 @@ useEffect(() => {
             </div>
 
             <div className="panel-card mt-4">
-              <div className="panel-header"><h2>Predictive insight</h2><button type="button" className="btn-log" style={{ background: '#5b51a8', padding: '0.4rem 0.85rem' }} onClick={() => changeTab('predictions')}><i className="bi bi-graph-up-arrow me-1" />See forecasts</button></div>
+              <div className="panel-header"><h2>Predictive insight</h2><button type="button" className="palm-btn palm-btn-primary" style={{ padding: '0.4rem 0.85rem' }} onClick={() => changeTab('predictions')}><i className="bi bi-graph-up-arrow" />See forecasts</button></div>
               <div className="p-3 text-muted">
                 {reports.totalBookings === 0 && reports.totalServices === 0
                   ? 'Once bookings and shuttle trips start flowing, usage forecasts (peak rental periods and upcoming maintenance windows) will appear here to help you plan fleet allocation.'
@@ -342,68 +470,40 @@ useEffect(() => {
 
         {tab === 'reports' && (
           <>
-            <div className="panel-card mb-4">
-              <div className="panel-header">
-                <h2><i className="bi bi-currency-rand me-2" />Revenue summary</h2>
-                <span className="panel-actions">export available as PDF / Excel</span>
-              </div>
+            <div className="panel-card fleet-report-controls mb-4">
+              <div className="panel-header"><h2><i className="bi bi-sliders me-2" />Report filters</h2><span className="panel-actions">All filters update the report instantly</span></div>
               <div className="p-3">
-                <div className="row g-3">
-                  <div className="col-md-4">
-                    <div className="fleet-driver-card">
-                      <div className="task-sub">Rental revenue</div>
-                      <div className="fleet-quote-total"><span className="amount" style={{ fontSize: '1.3rem' }}>{formatPrice(reports.totalRentalRevenue)}</span></div>
-                    </div>
-                  </div>
-                  <div className="col-md-4">
-                    <div className="fleet-driver-card">
-                      <div className="task-sub">Shuttle revenue</div>
-                      <div className="fleet-quote-total"><span className="amount" style={{ fontSize: '1.3rem' }}>{formatPrice(reports.serviceRevenue)}</span></div>
-                    </div>
-                  </div>
-                  <div className="col-md-4">
-                    <div className="fleet-driver-card" style={{ borderColor: '#775a19' }}>
-                      <div className="task-sub">Total fleet revenue</div>
-                      <div className="fleet-quote-total"><span className="amount" style={{ fontSize: '1.3rem' }}>{formatPrice(reports.totalRevenue)}</span></div>
-                    </div>
-                  </div>
+                <div className="fleet-report-types mb-3">
+                  {[['utilization', 'Vehicle Utilisation', 'bi-speedometer2'], ['revenue', 'Revenue & Financial', 'bi-currency-rand'], ['maintenance', 'Maintenance & Downtime', 'bi-wrench-adjustable']].map(([key, label, icon]) => (
+                    <button key={key} type="button" className={`fleet-report-type ${reportType === key ? 'active' : ''}`} onClick={() => setReportType(key)}><i className={`bi ${icon}`} />{label}</button>
+                  ))}
                 </div>
+                <div className="row g-3">
+                  <div className="col-md-3"><label className="book-label">From</label><input type="date" className="form-control book-input" value={reportFilters.from} onChange={(e) => setReportFilters({ ...reportFilters, from: e.target.value })} /></div>
+                  <div className="col-md-3"><label className="book-label">To</label><input type="date" className="form-control book-input" value={reportFilters.to} onChange={(e) => setReportFilters({ ...reportFilters, to: e.target.value })} /></div>
+                  <div className="col-md-2"><label className="book-label">Vehicle class</label><select className="form-select book-input" value={reportFilters.category} onChange={(e) => setReportFilters({ ...reportFilters, category: e.target.value })}><option>All</option>{VEHICLE_CATEGORIES.map((item) => <option key={item}>{item}</option>)}</select></div>
+                  <div className="col-md-2"><label className="book-label">Vehicle status</label><select className="form-select book-input" value={reportFilters.status} onChange={(e) => setReportFilters({ ...reportFilters, status: e.target.value })}><option>All</option>{VEHICLE_STATUSES.map((item) => <option key={item}>{item}</option>)}</select></div>
+                  <div className="col-md-2"><label className="book-label">Branch</label><select className="form-select book-input" value={reportFilters.branch} onChange={(e) => setReportFilters({ ...reportFilters, branch: e.target.value })}><option>All</option>{[...new Set((raw?.bookings || []).map((item) => item.pickupBranchId).filter(Boolean))].map((item) => <option key={item}>{item}</option>)}</select></div>
+                </div>
+                <button type="button" className="palm-btn palm-btn-outline mt-3" onClick={() => setReportFilters({ from: '', to: '', category: 'All', status: 'All', branch: 'All' })}><i className="bi bi-arrow-counterclockwise" />Reset filters</button>
               </div>
             </div>
 
-            <div className="panel-card">
-              <div className="panel-header"><h2><i className="bi bi-person-video3 me-2" />Driver performance</h2></div>
-              <div className="table-responsive">
-                <table className="task-table">
-                  <thead><tr><th>Driver</th><th>Shift</th><th>Rating</th><th>Trips completed</th><th>Revenue</th><th>Performance</th></tr></thead>
-                  <tbody>
-                    {grades.length === 0 ? (
-                      <tr><td colSpan="6" className="text-center py-5 text-muted">Add drivers to start tracking performance.</td></tr>
-                    ) : (
-                      grades.map((g) => (
-                        <tr key={g.driver.id}>
-                          <td>
-                            <div className="task-name">{g.driver.name}</div>
-                            <div className="task-sub">{g.driver.phone}</div>
-                          </td>
-                          <td className="task-sub">{g.driver.shiftStart}–{g.driver.shiftEnd}</td>
-                          <td>★ {g.driver.rating ?? 5}</td>
-                          <td className="task-name">{g.trips}</td>
-                          <td className="task-name">{formatPrice(g.revenue)}</td>
-                          <td>
-                            <span className={`fleet-badge ${g.grade === 'Strong' ? 'fleet-badge-Available' : g.grade === 'Steady' ? 'fleet-badge-Reserved' : 'fleet-badge-PendingAssignment'}`}>{g.grade}</span>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            <div className="text-muted small mt-3">
-              <i className="bi bi-lightbulb me-1" />Reports aggregate bookings, trips and billing records. Utilization is the share of fleet currently reserved or out of service.
-            </div>
+            {!reportData || (reportData.filteredBookings.length === 0 && reportData.filteredServices.length === 0 && reportData.filteredWorkOrders.length === 0) ? (
+              <div className="panel-card fleet-report-empty"><i className="bi bi-bar-chart-line" /><h2>No report data found</h2><p>No transaction or operational data found for the selected date range and filters. Broaden the filter parameters to generate a report.</p></div>
+            ) : (
+              <>
+                <div className="fleet-report-kpis mb-4">
+                  <div><span>Fleet matched</span><strong>{reportData.filteredVehicles.length}</strong></div>
+                  <div><span>Utilisation</span><strong>{reportData.utilization}%</strong></div>
+                  <div><span>Rental revenue</span><strong>{formatPrice(reportData.rentalRevenue)}</strong></div>
+                  <div><span>Open repairs</span><strong>{reportData.filteredWorkOrders.filter((w) => !['SignedOff', 'Cancelled'].includes(w.status)).length}</strong></div>
+                </div>
+                {reportType === 'revenue' && <div className="panel-card p-4"><h2 className="h5">Consolidated financial dashboard</h2><p className="text-muted">Revenue by selected filters, including rental income and completed shuttle services.</p><div className="fleet-report-bars"><div><span>Rental income</span><strong>{formatPrice(reportData.rentalRevenue)}</strong></div><div><span>Shuttle revenue</span><strong>{formatPrice(reportData.shuttleRevenue)}</strong></div><div><span>Total gross revenue</span><strong>{formatPrice(reportData.rentalRevenue + reportData.shuttleRevenue)}</strong></div></div></div>}
+                {reportType === 'utilization' && <div className="panel-card p-4"><h2 className="h5">Vehicle utilisation by class</h2><p className="text-muted">{reportData.rentedDays} rented vehicle-days across {reportData.filteredVehicles.length} matched vehicles.</p>{reportData.classBreakdown.map((item) => <div className="fleet-class-bar" key={item.label}><div><span>{item.label} · {item.vehicles} vehicle{item.vehicles === 1 ? '' : 's'}</span><strong>{item.rented} days</strong></div><div><span style={{ width: `${Math.min(100, item.rented / Math.max(1, reportData.rentedDays) * 100)}%` }} /></div></div>)}</div>}
+                {reportType === 'maintenance' && <div className="panel-card p-4"><h2 className="h5">Maintenance &amp; downtime timeline</h2><p className="text-muted">{reportData.filteredWorkOrders.length} work orders and {reportData.filteredIncidents.length} incidents match the selected filters.</p>{reportData.filteredWorkOrders.length === 0 ? <div className="text-muted">No maintenance activity found for this selection.</div> : reportData.filteredWorkOrders.map((order) => <div className="fleet-report-event" key={order.id}><i className="bi bi-wrench-adjustable" /><div><strong>{order.title || 'Maintenance work order'}</strong><span>{order.vehicleName || 'Vehicle'} · {order.status} · {formatPrice(order.finalCost || order.estimatedCost)}</span></div></div>)}</div>}
+              </>
+            )}
           </>
         )}
 
@@ -512,6 +612,25 @@ useEffect(() => {
                       <input type="number" min="0" className="form-control book-input" value={vehicleForm.pricePerDay} onChange={(e) => setVehicleForm({ ...vehicleForm, pricePerDay: e.target.value })} />
                     </div>
                     <div className="col-md-3">
+                      <label className="book-label">Rate / hour (R)</label>
+                      <input type="number" min="0" className="form-control book-input" placeholder="auto" value={vehicleForm.pricePerHour} onChange={(e) => setVehicleForm({ ...vehicleForm, pricePerHour: e.target.value })} />
+                      <div className="text-muted small mt-1">Leave blank to auto-derive from the daily rate.</div>
+                    </div>
+                    <div className="col-md-3">
+                      <label className="book-label">Lease / month (R)</label>
+                      <input type="number" min="0" className="form-control book-input" placeholder="auto" value={vehicleForm.pricePerMonth} onChange={(e) => setVehicleForm({ ...vehicleForm, pricePerMonth: e.target.value })} />
+                      <div className="text-muted small mt-1">Leave blank to auto-derive from the daily rate.</div>
+                    </div>
+                    <div className="col-md-3">
+                      <label className="book-label">Rating (0–5)</label>
+                      <input type="number" min="0" max="5" step="0.1" className="form-control book-input" placeholder="auto" value={vehicleForm.rating} onChange={(e) => setVehicleForm({ ...vehicleForm, rating: e.target.value })} />
+                      <div className="text-muted small mt-1">Leave blank to show a placeholder rating.</div>
+                    </div>
+                    <div className="col-md-3">
+                      <label className="book-label">Review count</label>
+                      <input type="number" min="0" className="form-control book-input" placeholder="auto" value={vehicleForm.reviewCount} onChange={(e) => setVehicleForm({ ...vehicleForm, reviewCount: e.target.value })} />
+                    </div>
+                    <div className="col-md-3">
                       <label className="book-label">Deposit (R)</label>
                       <input type="number" min="0" className="form-control book-input" value={vehicleForm.deposit} onChange={(e) => setVehicleForm({ ...vehicleForm, deposit: e.target.value })} />
                     </div>
@@ -563,11 +682,11 @@ useEffect(() => {
                     </div>
                   </div>
                   <div className="d-flex gap-2 mt-3">
-                    <button type="submit" className="btn-log" disabled={saving}>
-                      <i className="bi bi-check-lg me-2" />{saving ? 'Saving…' : editingVehicle ? 'Save changes' : 'Add vehicle'}
+                    <button type="submit" className="palm-btn palm-btn-primary" disabled={saving}>
+                      <i className="bi bi-check-lg" />{saving ? 'Saving…' : editingVehicle ? 'Save changes' : 'Add vehicle'}
                     </button>
                     {editingVehicle && (
-                      <button type="button" className="btn btn-light" onClick={() => { setEditingVehicle(null); setVehicleForm(EMPTY_VEHICLE); }}>Cancel edit</button>
+                      <button type="button" className="palm-btn palm-btn-outline" onClick={() => { setEditingVehicle(null); setVehicleForm(EMPTY_VEHICLE); }}>Cancel edit</button>
                     )}
                   </div>
                 </form>
@@ -666,11 +785,11 @@ useEffect(() => {
                     </div>
                   </div>
                   <div className="d-flex gap-2 mt-3">
-                    <button type="submit" className="btn-log" disabled={saving}>
-                      <i className="bi bi-check-lg me-2" />{saving ? 'Saving…' : editingDriver ? 'Save changes' : 'Add driver'}
+                    <button type="submit" className="palm-btn palm-btn-primary" disabled={saving}>
+                      <i className="bi bi-check-lg" />{saving ? 'Saving…' : editingDriver ? 'Save changes' : 'Add driver'}
                     </button>
                     {editingDriver && (
-                      <button type="button" className="btn btn-light" onClick={() => { setEditingDriver(null); setDriverForm(EMPTY_DRIVER); }}>Cancel</button>
+                      <button type="button" className="palm-btn palm-btn-outline" onClick={() => { setEditingDriver(null); setDriverForm(EMPTY_DRIVER); }}>Cancel</button>
                     )}
                   </div>
                 </form>
@@ -705,6 +824,18 @@ useEffect(() => {
                   ))
                 )}
               </div>
+            </div>
+          </div>
+        )}
+
+        {tab === 'handovers' && (
+          <div className="panel-card">
+            <div className="panel-header">
+              <h2><i className="bi bi-arrow-left-right me-2" />Check-in &amp; check-out records</h2>
+              <Link to="/Fleet/Handovers" className="panel-link">Open full register →</Link>
+            </div>
+            <div className="p-3">
+              <HandoverRegister />
             </div>
           </div>
         )}

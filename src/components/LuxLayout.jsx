@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { isAdminAccount } from '../services/userService';
+import GuestLayout from './GuestLayout';
 
 const NAV_SECTIONS = [
   {
@@ -83,22 +84,16 @@ const FLEET_OPERATOR_SECTIONS = [
     label: 'Fleet Operations',
     items: [
       { to: '/Fleet/Dashboard', icon: 'bi-kanban', label: 'Fleet Ops' },
-      { to: '/Fleet/Charges', icon: 'bi-credit-card', label: 'Charges & Payments' },
-      { to: '/Fleet/Incidents', icon: 'bi-bug', label: 'Incident Register' },
-    ],
-  },
-];
-
-const FLEET_MANAGER_SECTIONS = [
-  {
-    label: 'Fleet Manager',
-    items: [
-      { to: '/Fleet/Manager', icon: 'bi-speedometer2', label: 'Manager Overview' },
-      { to: '/Fleet/Dashboard', icon: 'bi-kanban', label: 'Fleet Ops' },
-      { to: '/Fleet/Charges', icon: 'bi-credit-card', label: 'Charges' },
-      { to: '/Fleet/Incidents', icon: 'bi-bug', label: 'Incidents' },
-      { to: '/Fleet/Maintenance', icon: 'bi-wrench-adjustable', label: 'Work Orders' },
+      { to: '/Fleet/Handovers', icon: 'bi-arrow-left-right', label: 'Handovers' },
       { to: '/Fleet/Vehicles', icon: 'bi-car-front', label: 'Vehicles Hub' },
+      { to: '/Fleet/Rent', icon: 'bi-calendar-plus', label: 'Rental Bookings' },
+      { to: '/Fleet/Service', icon: 'bi-taxi-front', label: 'Shuttle Requests' },
+      { to: '/Fleet/MyTrips', icon: 'bi-signpost-split', label: 'Trip Bookings' },
+      { to: '/Fleet/Charges', icon: 'bi-credit-card', label: 'Charges & Payments' },
+      { to: '/Fleet/Incident/Report', icon: 'bi-bug', label: 'Report Incident' },
+      { to: '/Fleet/Incidents', icon: 'bi-bug', label: 'Incident Register' },
+      { to: '/Fleet/Maintenance', icon: 'bi-wrench-adjustable', label: 'Work Orders' },
+      { to: '/Fleet/Records', icon: 'bi-clipboard-data', label: 'Vehicle Records' },
     ],
   },
 ];
@@ -161,9 +156,15 @@ const ADMIN_SECTIONS = [
     items: [
       { to: '/Fleet/Vehicles', icon: 'bi-car-front', label: 'Vehicles Hub' },
       { to: '/Fleet/Dashboard', icon: 'bi-kanban', label: 'Fleet Ops' },
+      { to: '/Fleet/Handovers', icon: 'bi-arrow-left-right', label: 'Handovers' },
       { to: '/Fleet/Charges', icon: 'bi-credit-card', label: 'Fleet Charges' },
+      { to: '/Fleet/Rent', icon: 'bi-calendar-plus', label: 'Rental Bookings' },
+      { to: '/Fleet/Service', icon: 'bi-taxi-front', label: 'Shuttle Requests' },
+      { to: '/Fleet/MyTrips', icon: 'bi-signpost-split', label: 'Trip Bookings' },
+      { to: '/Fleet/Incident/Report', icon: 'bi-bug', label: 'Report Incident' },
       { to: '/Fleet/Incidents', icon: 'bi-bug', label: 'Incidents' },
       { to: '/Fleet/Maintenance', icon: 'bi-wrench-adjustable', label: 'Work Orders' },
+      { to: '/Fleet/Records', icon: 'bi-clipboard-data', label: 'Vehicle Records' },
       { to: '/Fleet/Manager', icon: 'bi-speedometer2', label: 'Fleet Reports' },
     ],
   },
@@ -179,6 +180,11 @@ export default function LuxLayout({ children }) {
   const role = user?.role;
   const isAdminView = role === 'admin' && isAdminAccount(user?.email);
 
+  // Guests and fleet managers share the dedicated "The Palm" shell.
+  if (role === 'guest' || role === 'fleetmanager') {
+    return <GuestLayout>{children}</GuestLayout>;
+  }
+
   const base = isAdminView ? ADMIN_SECTIONS
     : role === 'restaurant' ? [...NAV_SECTIONS, ...RESTAURANT_SECTIONS]
     : role === 'housekeeping' ? [...NAV_SECTIONS, ...HOUSEKEEPING_SECTIONS, ...RESTAURANT_SECTIONS]
@@ -186,7 +192,6 @@ export default function LuxLayout({ children }) {
     : role === 'storekeeper' ? [...NAV_SECTIONS, ...STOREKEEPER_SECTIONS, ...RESTAURANT_SECTIONS]
     : role === 'maintenance' ? [...NAV_SECTIONS, ...MAINTENANCE_SECTIONS, ...RESTAURANT_SECTIONS]
     : role === 'fleet' ? [...NAV_SECTIONS, ...FLEET_OPERATOR_SECTIONS, ...RESTAURANT_SECTIONS]
-    : role === 'fleetmanager' ? [...NAV_SECTIONS, ...FLEET_MANAGER_SECTIONS, ...RESTAURANT_SECTIONS]
     : user ? [...NAV_SECTIONS, ...GUEST_SECTIONS]
     : NAV_SECTIONS;
 
@@ -398,7 +403,9 @@ function pageTitle(path) {
   if (path.startsWith('/Fleet/MyTrips')) return 'My Trips';
   if (path.startsWith('/Fleet/Incident/Report')) return 'Report Incident';
   if (path.startsWith('/Fleet/Incidents')) return 'Incident Register';
+  if (path.startsWith('/Fleet/Handovers')) return 'Handovers';
   if (path.startsWith('/Fleet/Maintenance')) return 'Work Orders & Maintenance';
+  if (path.startsWith('/Fleet/Records')) return 'Vehicle Records';
   if (path.startsWith('/Fleet/Service')) return 'Shuttle & Car Service';
   if (path.startsWith('/Fleet/Rent')) return 'Book a Rental';
   if (path.startsWith('/Fleet/Handover')) return 'Vehicle Handover';

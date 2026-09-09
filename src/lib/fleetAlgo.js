@@ -1,5 +1,28 @@
 import { round } from './utils';
-import { CANCELLATION_WINDOW_HOURS, CANCELLATION_FEE } from './constants';
+import {
+  CANCELLATION_WINDOW_HOURS,
+  CANCELLATION_FEE,
+  FLEET_BRANCHES,
+  ONE_WAY_FEES,
+  YOUNG_DRIVER_SURCHARGE_PER_DAY,
+  YOUNG_DRIVER_SURCHARGE_CAP_DAYS,
+  YOUNG_DRIVER_AGE_THRESHOLD,
+  WAIVER_LIABILITY_CAP,
+  ADDITIONAL_DRIVER_FEE,
+  LATE_RETURN_DAILY_FEE,
+  REFUEL_SERVICE_FEE,
+  FUEL_PRICE_PER_LITRE,
+  TANK_LITRES_DEFAULT,
+  ACCIDENT_ADMIN_FEE,
+  ACCIDENT_ADMIN_FEE_LOW,
+  ACCIDENT_ADMIN_FEE_LOW_THRESHOLD,
+  RENTAL_CANCELLATION_POLICY,
+  SERVICE_NOTICE_HOURS,
+  SERVICE_CANCELLATION_TIERS,
+  DEPOSIT_AMOUNT,
+  HOURLY_RATE_FACTOR,
+  LEASE_MONTHLY_FACTOR,
+} from './constants';
 
 // ---------------------------------------------------------------
 // Geo helpers
@@ -167,6 +190,41 @@ export const smartMatchVehicles = (vehicles, ctx = {}) =>
 export const categoryPriceRank = (category) => CATEGORY_RANK[category] || 3;
 
 // ---------------------------------------------------------------
+// Rate card — hourly / daily / leasing tiers for a vehicle
+// ---------------------------------------------------------------
+
+export const vehicleRateCard = (vehicle) => {
+  const perDay = Number(vehicle?.pricePerDay) || 0;
+  const perHour = Number(vehicle?.pricePerHour) || round(perDay * HOURLY_RATE_FACTOR);
+  const perMonth = Number(vehicle?.pricePerMonth) || round(perDay * LEASE_MONTHLY_FACTOR);
+  return { perHour, perDay, perMonth };
+};
+
+// ---------------------------------------------------------------
+// Rating display — real rating/reviewCount if a manager set them,
+// otherwise a stable per-vehicle placeholder (until guest reviews ship)
+// ---------------------------------------------------------------
+
+const seedFromString = (str) => {
+  let h = 0;
+  const s = String(str || '');
+  for (let i = 0; i < s.length; i += 1) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return h;
+};
+
+export const vehicleRatingInfo = (vehicle) => {
+  if (Number(vehicle?.rating) > 0) {
+    return { rating: Number(vehicle.rating), reviewCount: Number(vehicle.reviewCount) || 0, isPlaceholder: false };
+  }
+  const seed = seedFromString(vehicle?.unitNumber || vehicle?.id || vehicle?.name);
+  return {
+    rating: round(3.8 + (seed % 12) / 10),
+    reviewCount: 6 + (seed % 35),
+    isPlaceholder: true,
+  };
+};
+
+// ---------------------------------------------------------------
 // Driver matching — proximity + workload scoring
 // ---------------------------------------------------------------
 
@@ -278,6 +336,125 @@ export const projectSeries = (values, opts = {}) => {
     out.push(last);
   }
   return { series: out, forecastCount: horizon, slope: fit.slope, r2: fit.r2 };
+};
+
+// ---------------------------------------------------------------
+// Avis-aligned fee calculators (UC11, UC13–UC16, UC17, UC19, UC21)
+// ---------------------------------------------------------------
+
+export const ageFromDob = (dob) => {
+  if (!dob) return null;
+  const born = new Date(`${dob}T00:00:00`);
+  if (Number.isNaN(born.getTime())) return null;
+  const now = new Date();
+  let age = now.getFullYear() - born.getFullYear();
+  const m = now.getMonth() - born.getMonth();
+  if (m < 0 || (m === 0 && now.getDate() < born.getDate())) age -= 1;
+  return age;
+};
+
+export const isYoungDriver = (dob) => {
+  const age = ageFromDob(dob);
+  return age != null && age < YOUNG_DRIVER_AGE_THRESHOLD;
+};
+
+export const additionalDriverFee = (hasAdditionalDriver) => (hasAdditionalDriver ? ADDITIONAL_DRIVER_FEE : 0);
+
+export const youngDriverSurcharge = (dob, days) => {
+  if (!isYoungDriver(dob)) return 0;
+  const chargeableDays = Math.min(Math.max(0, Number(days) || 0), YOUNG_DRIVER_SURCHARGE_CAP_DAYS);
+  return round(chargeableDays * YOUNG_DRIVER_SURCHARGE_PER_DAY);
+};
+
+export const branchById = (branchId) => FLEET_BRANCHES.find((b) => b.id === branchId) || null;
+
+export const locationSurcharge = (pickupBranchId) => Number(branchById(pickupBranchId)?.locationSurcharge) || 0;
+
+export const liabilityCapFor = (vehicle, hasWaiver) =>
+  hasWaiver ? WAIVER_LIABILITY_CAP : Number(vehicle?.deposit) || DEPOSIT_AMOUNT;
+
+export const oneWayFee = (pickupBranchId, returnBranchId) => {
+  if (!pickupBranchId || !returnBranchId || pickupBranchId === returnBranchId) return 0;
+  return Number(ONE_WAY_FEES[`${pickupBranchId}-${returnBranchId}`]) || 0;
+};
+
+export const noticePeriodCheck = (serviceType, pickupDate, pickupTime = '00:00') => {
+  const hoursRequired = Number(SERVICE_NOTICE_HOURS[serviceType]) || 0;
+  const pickup = pickupDate ? new Date(`${pickupDate}T${pickupTime || '00:00'}`) : new Date(NaN);
+  const hoursNotice = Number.isNaN(pickup.getTime()) ? 0 : (pickup.getTime() - Date.now()) / 3600000;
+  return {
+    hoursRequired,
+    hoursNotice: round(hoursNotice),
+    ok: hoursNotice >= hoursRequired,
+  };
+};
+
+export const lateReturnCharges = ({ scheduledDropoff, scheduledDropoffTime = '00:00', actualReturn = Date.now(), dailyRate = 0, graceHours = 0 }) => {
+  const scheduled = scheduledDropoff ? new Date(`${scheduledDropoff}T${scheduledDropoffTime || '00:00'}`) : new Date(NaN);
+  const actual = typeof actualReturn === 'number' ? new Date(actualReturn) : new Date(actualReturn);
+  const elapsedHours = Math.round((actual.getTime() - scheduled.getTime()) / 3600000);
+  if (Number.isNaN(scheduled.getTime()) || Number.isNaN(actual.getTime()) || actual <= scheduled) {
+    return { lateDays: 0, extraDayFee: 0, dailyLateFee: 0, total: 0, status: 'Early', elapsedHours, lateHours: 0, graceHours };
+  }
+  const lateHoursRaw = Math.ceil((actual.getTime() - scheduled.getTime()) / 3600000);
+  const chargeableHours = Math.max(0, lateHoursRaw - (Number(graceHours) || 0));
+  const status = chargeableHours === 0 ? 'OnTime' : 'Late';
+  const lateDays = Math.ceil(chargeableHours / 24);
+  const extraDayFee = round(lateDays * (Number(dailyRate) || 0));
+  const dailyLateFee = round(lateDays * LATE_RETURN_DAILY_FEE);
+  return { lateDays, extraDayFee, dailyLateFee, total: round(extraDayFee + dailyLateFee), status, elapsedHours, lateHours: chargeableHours, graceHours };
+};
+
+export const fuelVarianceCharge = ({ fuelOutPct = 0, fuelInPct = 0, tankLitres = TANK_LITRES_DEFAULT }) => {
+  const shortfallPct = Math.max(0, (Number(fuelOutPct) || 0) - (Number(fuelInPct) || 0));
+  if (shortfallPct <= 0) return { shortfallLitres: 0, fuelCost: 0, serviceFee: 0, total: 0 };
+  const shortfallLitres = round((shortfallPct / 100) * (Number(tankLitres) || TANK_LITRES_DEFAULT));
+  const fuelCost = round(shortfallLitres * FUEL_PRICE_PER_LITRE);
+  return { shortfallLitres, fuelCost, serviceFee: REFUEL_SERVICE_FEE, total: round(fuelCost + REFUEL_SERVICE_FEE) };
+};
+
+export const accidentAdminFee = (repairEstimate = 0) =>
+  Number(repairEstimate) > 0 && Number(repairEstimate) < ACCIDENT_ADMIN_FEE_LOW_THRESHOLD
+    ? ACCIDENT_ADMIN_FEE_LOW
+    : ACCIDENT_ADMIN_FEE;
+
+// UC21 policy branched from UC11 (self-drive rentals): ≥3 days out → lower of
+// paid amount or R550; <3 days out → lower of paid amount or 3 days' rental
+// value; day-of/no-show → full amount retained.
+export const rentalCancellationPenalty = ({ paidAmount = 0, dailyRate = 0, hoursUntilPickup = 0, isDayOf = false }) => {
+  const paid = Number(paidAmount) || 0;
+  if (isDayOf || hoursUntilPickup <= 0) {
+    return { fee: paid, tier: 'DayOf/NoShow', note: 'Day-of or no-show — full amount retained' };
+  }
+  const daysOut = hoursUntilPickup / 24;
+  if (daysOut >= RENTAL_CANCELLATION_POLICY.farWindowDays) {
+    return {
+      fee: round(Math.min(paid, RENTAL_CANCELLATION_POLICY.farWindowFee)),
+      tier: `>=${RENTAL_CANCELLATION_POLICY.farWindowDays} days`,
+      note: `Lower of paid amount or R${RENTAL_CANCELLATION_POLICY.farWindowFee}`,
+    };
+  }
+  const threeDaysValue = round(3 * (Number(dailyRate) || 0));
+  return {
+    fee: round(Math.min(paid, threeDaysValue)),
+    tier: `<${RENTAL_CANCELLATION_POLICY.farWindowDays} days`,
+    note: "Lower of paid amount or 3 days' rental value",
+  };
+};
+
+// UC21 policy branched from UC17 (chauffeur/transfer bookings).
+export const serviceCancellationPenalty = ({ confirmedBookingAmount = 0, hoursUntilPickup = 0 }) => {
+  const amount = Number(confirmedBookingAmount) || 0;
+  let fraction = SERVICE_CANCELLATION_TIERS.hours24;
+  let tier = '>=24h notice';
+  if (hoursUntilPickup < 1) {
+    fraction = SERVICE_CANCELLATION_TIERS.underHour1;
+    tier = '<1h notice';
+  } else if (hoursUntilPickup < 24) {
+    fraction = SERVICE_CANCELLATION_TIERS.underHours24;
+    tier = '<24h notice';
+  }
+  return { fee: round(amount * fraction), tier, fraction };
 };
 
 export const groupDailyCounts = (items = [], { valueOf = (i) => i?.createdAt, days = 14 } = {}) => {

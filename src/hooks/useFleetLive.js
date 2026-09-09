@@ -6,7 +6,7 @@ import {
   subscribeFleetDrivers,
   subscribeFleetIncidents,
   subscribeFleetWorkOrders,
-  listVehicleHandovers,
+  subscribeVehicleHandovers,
   computeFleetStats,
 } from '../services/fleetService';
 
@@ -31,8 +31,8 @@ export const useFleetLive = () => {
       subscribeFleetDrivers((d) => mounted && setDrivers(d)),
       subscribeFleetIncidents((i) => mounted && setIncidents(i)),
       subscribeFleetWorkOrders((w) => mounted && setWorkOrders(w)),
+      subscribeVehicleHandovers((h) => mounted && setHandovers(h)),
     ];
-    listVehicleHandovers().then((h) => mounted && setHandovers(h));
     const timer = setTimeout(() => mounted && setLoading(false), 250);
     return () => {
       mounted = false;

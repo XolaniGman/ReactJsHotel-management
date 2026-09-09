@@ -5,6 +5,7 @@ import { listTables, reserveTable } from '../services/restaurantService';
 import { todayISO } from '../lib/utils';
 import './events.css';
 import './restaurant.css';
+import './palm.css';
 
 const OPEN_TIME = '07:00';
 const CLOSE_TIME = '21:30';
@@ -67,19 +68,19 @@ export default function RestaurantReserve() {
   };
 
   return (
-    <div className="rest-shell">
-      <div className="rest-hero">
-        <div className="rest-hero-body">
-          <div className="rest-kicker">Reservations</div>
-          <h1 className="rest-title">Reserve a table</h1>
-          <p className="rest-subtitle mb-0">
+    <div className="rest-shell palm-page">
+      <div className="palm-page-header">
+        <div>
+          <div className="palm-page-kicker">Reservations</div>
+          <h1 className="palm-page-title">Reserve a table</h1>
+          <p className="palm-page-copy">
             Pick a table from the dining floor, then confirm your details. Reservations are held
             for 15 minutes after the booked time.
           </p>
         </div>
       </div>
 
-      {error && <div className="lost-alert lost-alert-danger mb-3"><i className="bi bi-exclamation-triangle me-2" />{error}</div>}
+      {error && <div className="palm-alert palm-alert-danger"><i className="bi bi-exclamation-triangle" />{error}</div>}
 
       {booking ? (
         <div className="rest-success">
@@ -97,7 +98,7 @@ export default function RestaurantReserve() {
             <div><span>Held until</span><strong>{booking.time.slice(0, 2)}:{booking.time.slice(3)} + 15 min</strong></div>
           </div>
 
-          <Link to={`/Restaurant?table=${booking.table}`} className="rest-cta mt-4">
+          <Link to={`/Restaurant?table=${booking.table}`} className="palm-btn palm-btn-primary mt-4">
             <i className="bi bi-egg-fried me-2" /> Order from the menu now
           </Link>
           <button type="button" className="rest-btn-link mt-2" onClick={() => { setBooking(null); setStep(1); }}>
@@ -172,12 +173,12 @@ export default function RestaurantReserve() {
           )}
 
           {sorted.some((t) => t.status === 'Available') && !sorted.some((t) => canPick(t)) && (
-            <div className="lost-alert lost-alert-danger mt-3">
-              <i className="bi bi-exclamation-triangle me-2" />No available table seats a party of {partySize}. Try a smaller group.
+            <div className="palm-alert palm-alert-danger mt-3">
+              <i className="bi bi-exclamation-triangle" />No available table seats a party of {partySize}. Try a smaller group.
             </div>
           )}
 
-          <button type="button" className="rest-cta mt-4" disabled={!selected} onClick={() => setStep(2)}>
+          <button type="button" className="palm-btn palm-btn-primary mt-4" disabled={!selected} onClick={() => setStep(2)}>
             <i className="bi bi-arrow-right me-2" /> Continue with Table {selected ? selected.number : ''}
           </button>
         </div>
@@ -238,7 +239,7 @@ export default function RestaurantReserve() {
               Operating hours {OPEN_TIME} – {CLOSE_TIME}. The table is held for 15 minutes after the booked time.
             </div>
 
-            <button type="submit" className="rest-cta mt-4">
+            <button type="submit" className="palm-btn palm-btn-primary mt-4">
               <i className="bi bi-calendar-check me-2" /> Confirm reservation for Table {selected.number}
             </button>
           </div>

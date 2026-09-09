@@ -53,7 +53,10 @@ export default function FleetIncidentReport() {
       if (type === 'booking') {
         const bs = await listMyCarBookings(user.uid);
         const b = bs.find((x) => x.id === id);
-        if (b) ctx = { ...ctx, bookingId: b.id, vehicleId: b.vehicleId, vehicleName: b.vehicleName, unitNumber: b.unitNumber, hint: `${b.ref} · ${b.vehicleName || 'rental'}` };
+        if (b) {
+          const vehicle = (await listFleetVehicles()).find((item) => item.id === b.vehicleId);
+          ctx = { ...ctx, bookingId: b.id, vehicleId: b.vehicleId, vehicleName: b.vehicleName, vehicleImage: vehicle?.image || b.vehicleImage || '', unitNumber: b.unitNumber, hint: `${b.ref} · ${b.vehicleName || 'rental'}` };
+        }
       } else if (type === 'service') {
         const ss = await listCarServices();
         const s = ss.find((x) => x.id === id);
@@ -61,7 +64,7 @@ export default function FleetIncidentReport() {
       } else if (type === 'vehicle') {
         const vs = await listFleetVehicles();
         const v = vs.find((x) => x.id === id);
-        if (v) ctx = { ...ctx, vehicleId: v.id, vehicleName: v.name, unitNumber: v.unitNumber, hint: `Unit ${v.unitNumber} · ${v.name}` };
+        if (v) ctx = { ...ctx, vehicleId: v.id, vehicleName: v.name, vehicleImage: v.image || '', unitNumber: v.unitNumber, hint: `Unit ${v.unitNumber} · ${v.name}` };
       }
       if (!cancelled) setContext(ctx);
     })();
@@ -109,6 +112,7 @@ export default function FleetIncidentReport() {
       serviceId: context?.serviceId || '',
       vehicleId: context?.vehicleId || '',
       vehicleName: context?.vehicleName || '',
+      vehicleImage: context?.vehicleImage || '',
       evidence,
     });
     setBusy(false);

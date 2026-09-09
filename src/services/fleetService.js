@@ -12,8 +12,22 @@ import {
 import { db } from '../lib/firebase';
 import { addBillItem } from './billService';
 import { nightsBetween, round, todayISO, addDaysISO } from '../lib/utils';
-import { DEPOSIT_AMOUNT, CANCELLATION_WINDOW_HOURS, CANCELLATION_FEE } from '../lib/constants';
-import { dynamicRateMultiplier } from '../lib/fleetAlgo';
+import { DEPOSIT_AMOUNT, HIGH_RISK_EXTRA_HOLD, LATE_RETURN_GRACE_HOURS } from '../lib/constants';
+import {
+  dynamicRateMultiplier,
+  additionalDriverFee,
+  youngDriverSurcharge,
+  locationSurcharge,
+  liabilityCapFor,
+  branchById,
+  oneWayFee,
+  noticePeriodCheck,
+  lateReturnCharges,
+  fuelVarianceCharge,
+  accidentAdminFee,
+  rentalCancellationPenalty,
+  serviceCancellationPenalty,
+} from '../lib/fleetAlgo';
 
 const vehiclesCol = 'fleetVehicles';
 const bookingsCol = 'carBookings';
@@ -26,10 +40,12 @@ const workOrdersCol = 'fleetWorkOrders';
 export const carRef = (prefix = 'CR') =>
   `${prefix}-${Date.now().toString(36).toUpperCase()}${Math.floor(Math.random() * 900 + 100)}`;
 
-export const bookingDisplay = (status) =>
-  String(status || '')
+export const bookingDisplay = (status) => {
+  if (status === 'PendingInspection') return 'Returned — Pending Inspection';
+  return String(status || '')
     .replace(/([A-Z])/g, ' $1')
     .trim();
+};
 
 const mockImg = (id) => `https://images.unsplash.com/photo-${id}?auto=format&fit=crop&w=1200&q=80`;
 
@@ -75,7 +91,7 @@ const MOCK_FLEET_VEHICLES = [
       name: 'Kia Picanto 1.2', category: 'Compact', type: 'Hatchback', transmission: 'Manual',
       capacity: 5, pricePerDay: 420, deposit: 400, fuelType: 'Petrol',
       unitNumber: 'EC-105', plateNumber: 'GH 105 ZA', year: 2021, mileage: 28900,
-      nextServiceDate: addDaysISO(todayISO(), 6), status: 'InMaintenance',
+      nextServiceDate: addDaysISO(todayISO(), 6), status: 'Available',
       image: mockImg('1572569511254-d8f925fe2cbb'),
       description: 'The smallest coachwork with the biggest personality.',
       features: ['Air Conditioning', 'USB Charging'],
@@ -160,7 +176,7 @@ const MOCK_FLEET_VEHICLES = [
       name: 'VW Tiguan 1.4', category: 'SUV', type: 'SUV', transmission: 'Automatic',
       capacity: 5, pricePerDay: 1350, deposit: 1300, fuelType: 'Petrol',
       unitNumber: 'UV-304', plateNumber: 'GH 304 ZA', year: 2022, mileage: 21800,
-      nextServiceDate: addDaysISO(todayISO(), 12), status: 'InMaintenance',
+      nextServiceDate: addDaysISO(todayISO(), 12), status: 'Available',
       image: mockImg('1568605117036-5fe5e7bab0b7'),
       description: 'Premium compact SUV — serene, roomy and genuinely practical.',
       features: ['Bluetooth', 'Parking Sensors', 'Cruise Control'],
@@ -312,7 +328,6 @@ const sortByPickup = (docs) =>
   [...docs].sort((a, b) =>
     `${a.pickupDate || ''} ${a.pickupTime || ''}`.localeCompare(`${b.pickupDate || ''} ${b.pickupTime || ''}`),
   );
-const sortByCreated = (docs) => [...docs].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 
 export const subscribeFleetVehicles = (cb) =>
   onSnapshot(
@@ -350,6 +365,18 @@ export const updateServiceLivePosition = (serviceId, { lat, lng }) =>
     livePosition: { lat: Number(lat), lng: Number(lng), ts: Date.now() },
   });
 
+// Rental bookings: stream a checked-out vehicle's GPS position to the booking
+// record so the guest's My Trips view can show the car live (mirrors shuttle
+// tracking). `on` marks the stream active so listeners can render the map.
+export const updateBookingLivePosition = (bookingId, { lat, lng, on } = {}) => {
+  const patch = {};
+  if (Number.isFinite(Number(lat)) && Number.isFinite(Number(lng))) {
+    patch.livePosition = { lat: Number(lat), lng: Number(lng), ts: Date.now() };
+  }
+  if (typeof on === 'boolean') patch.liveTracking = on;
+  return updateDoc(doc(db, bookingsCol, bookingId), patch);
+};
+
 export const createFleetVehicle = (data) =>
   addDoc(collection(db, vehiclesCol), {
     name: data.name,
@@ -357,6 +384,8 @@ export const createFleetVehicle = (data) =>
     transmission: data.transmission,
     capacity: Number(data.capacity) || 4,
     pricePerDay: Number(data.pricePerDay) || 0,
+    pricePerHour: Number(data.pricePerHour) || 0,
+    pricePerMonth: Number(data.pricePerMonth) || 0,
     deposit: Number(data.deposit) || DEPOSIT_AMOUNT,
     fuelType: data.fuelType || 'Petrol',
     unitNumber: data.unitNumber || '',
@@ -368,6 +397,8 @@ export const createFleetVehicle = (data) =>
     image: data.image || '',
     description: data.description || '',
     features: data.features || [],
+    rating: Number(data.rating) || 0,
+    reviewCount: Number(data.reviewCount) || 0,
     createdAt: Date.now(),
   });
 
@@ -378,6 +409,8 @@ export const updateFleetVehicle = (id, data) =>
     transmission: data.transmission,
     capacity: Number(data.capacity) || 4,
     pricePerDay: Number(data.pricePerDay) || 0,
+    pricePerHour: Number(data.pricePerHour) || 0,
+    pricePerMonth: Number(data.pricePerMonth) || 0,
     deposit: Number(data.deposit) || DEPOSIT_AMOUNT,
     fuelType: data.fuelType || 'Petrol',
     unitNumber: data.unitNumber || '',
@@ -389,6 +422,8 @@ export const updateFleetVehicle = (id, data) =>
     image: data.image || '',
     description: data.description || '',
     features: data.features || [],
+    rating: Number(data.rating) || 0,
+    reviewCount: Number(data.reviewCount) || 0,
   });
 
 export const deleteFleetVehicle = (id) => deleteDoc(doc(db, vehiclesCol, id));
@@ -400,18 +435,38 @@ export const setVehicleStatus = (id, status) => {
 
 // ---------------- Quotes & availability ----------------
 
-export const computeRentalQuote = ({ vehicle, pickupDate, dropoffDate, addOns = [] }) => {
+export const computeRentalQuote = ({
+  vehicle,
+  pickupDate,
+  dropoffDate,
+  addOns = [],
+  additionalDriver = false,
+  dob = '',
+  pickupBranchId = 'main',
+  hasWaiver = false,
+}) => {
   const days = Math.max(1, nightsBetween(pickupDate, dropoffDate) || 1);
   const dyn = dynamicRateMultiplier({ pickupDate, dropoffDate, pricePerDay: vehicle.pricePerDay });
   const base = dyn.adjustedDaily * days;
   const addOnTotal = addOns.reduce((s, a) => s + (Number(a.price) || 0), 0);
   const deposit = Number(vehicle.deposit) || DEPOSIT_AMOUNT;
+  const additionalDriverAmount = additionalDriverFee(additionalDriver);
+  const youngDriverAmount = youngDriverSurcharge(dob, days);
+  const locationAmount = locationSurcharge(pickupBranchId);
+  const liabilityCap = liabilityCapFor(vehicle, hasWaiver);
+  const estimatedTotal = round(base + addOnTotal + additionalDriverAmount + youngDriverAmount + locationAmount + deposit);
   return {
     days,
     base,
     addOnTotal,
+    additionalDriverAmount,
+    youngDriverAmount,
+    locationAmount,
     deposit,
-    estimatedTotal: round(base + addOnTotal + deposit),
+    liabilityCap,
+    authorisationHoldAmount: deposit,
+    capturedAmount: 0,
+    estimatedTotal,
     baseDaily: Number(vehicle.pricePerDay) || 0,
     rateFactor: dyn.factor,
     adjustedDaily: dyn.adjustedDaily,
@@ -445,13 +500,29 @@ export const createCarBooking = async ({
   addOns,
   reservationId,
   notes,
+  additionalDriver = false,
+  driverDob = '',
+  pickupBranchId = 'main',
+  returnBranchId = 'main',
+  hasWaiver = false,
+  documentReviewRequired = false,
+  riskFlag = false,
 }) => {
   const vehicle = await getFleetVehicle(vehicleId);
   if (!vehicle) return { error: 'Vehicle not found.' };
   if (vehicle.status === 'InMaintenance' || vehicle.status === 'OutOfService') {
     return { error: 'This vehicle is not available at the moment.' };
   }
-  const quote = computeRentalQuote({ vehicle, pickupDate, dropoffDate, addOns });
+  const quote = computeRentalQuote({
+    vehicle,
+    pickupDate,
+    dropoffDate,
+    addOns,
+    additionalDriver,
+    dob: driverDob,
+    pickupBranchId,
+    hasWaiver,
+  });
   const ref = await addDoc(collection(db, bookingsCol), {
     ref: carRef('CR'),
     guestUid,
@@ -469,15 +540,31 @@ export const createCarBooking = async ({
     basePrice: quote.base,
     addOns: addOns || [],
     addOnTotal: quote.addOnTotal,
+    additionalDriver: !!additionalDriver,
+    additionalDriverAmount: quote.additionalDriverAmount,
+    driverDob: driverDob || '',
+    youngDriverAmount: quote.youngDriverAmount,
+    pickupBranchId,
+    returnBranchId,
+    locationAmount: quote.locationAmount,
+    hasWaiver: !!hasWaiver,
+    liabilityCap: quote.liabilityCap,
     deposit: quote.deposit,
+    authorisationHoldAmount: quote.authorisationHoldAmount,
+    capturedAmount: 0,
     estimatedTotal: quote.estimatedTotal,
     paidAmount: 0,
     finalCharges: 0,
     cancelFee: 0,
+    pendingCharges: [],
     licenseNumber: licenseNumber || '',
     licenseExpiry: licenseExpiry || '',
     reservationId: reservationId || '',
     notes: notes || '',
+    documentReviewRequired: !!documentReviewRequired,
+    riskFlag: !!riskFlag,
+    riskOverrideBy: '',
+    riskOverrideNote: '',
     status: 'PendingConfirmation',
     assignedBy: '',
     confirmedAt: null,
@@ -488,7 +575,9 @@ export const createCarBooking = async ({
         from: '',
         to: 'PendingConfirmation',
         by: guestName || 'Guest',
-        note: 'Rental request submitted',
+        note: documentReviewRequired
+          ? 'Rental request submitted — documents flagged for staff review'
+          : 'Rental request submitted',
       },
     ],
     createdAt: Date.now(),
@@ -513,14 +602,32 @@ export const getCarBooking = async (id) => {
   return snap.exists() ? { id, ...snap.data() } : null;
 };
 
-export const confirmCarBooking = async (id, { unitNumber, assignedBy }) => {
-  await updateDoc(doc(db, bookingsCol, id), {
+export const confirmCarBooking = async (id, { unitNumber, assignedBy, overrideNote }) => {
+  const booking = await getCarBooking(id);
+  if (!booking) return { error: 'Booking not found.' };
+  if (booking.riskFlag && !booking.riskOverrideBy && !overrideNote?.trim()) {
+    return { error: 'This guest is flagged high-risk — an explicit, logged staff override note is required before confirming.' };
+  }
+  const patch = {
     unitNumber,
     assignedBy,
     status: 'Confirmed',
     confirmedAt: Date.now(),
-  });
-  await logBookingHistory(id, 'Confirmed', assignedBy, `Vehicle ${unitNumber} assigned & confirmed`);
+  };
+  if (booking.riskFlag) {
+    patch.riskOverrideBy = assignedBy || 'Front Desk';
+    patch.riskOverrideNote = overrideNote?.trim() || '';
+  }
+  await updateDoc(doc(db, bookingsCol, id), patch);
+  await logBookingHistory(
+    id,
+    'Confirmed',
+    assignedBy,
+    booking.riskFlag
+      ? `Vehicle ${unitNumber} assigned & confirmed — high-risk override: ${overrideNote?.trim() || 'n/a'}`
+      : `Vehicle ${unitNumber} assigned & confirmed`,
+  );
+  return { ok: true };
 };
 
 export const updateCarBookingStatus = async (id, status, by) => {
@@ -532,24 +639,29 @@ export const cancelCarBooking = async (id, { byName }) => {
   const booking = await getCarBooking(id);
   if (!booking) return { error: 'Booking not found.' };
   const pickup = new Date(`${booking.pickupDate}T${booking.pickupTime || '00:00'}`);
-  const hoursUntilPickup = (pickup.getTime() - Date.now()) / 3600000;
-  const freeWindow = Number.isNaN(hoursUntilPickup) ? false : hoursUntilPickup >= CANCELLATION_WINDOW_HOURS;
-  const fee = freeWindow ? 0 : CANCELLATION_FEE;
+  const hoursUntilPickup = Number.isNaN(pickup.getTime()) ? 0 : (pickup.getTime() - Date.now()) / 3600000;
+  const isDayOf = !Number.isNaN(pickup.getTime()) && new Date().toDateString() === pickup.toDateString();
+  const penalty = rentalCancellationPenalty({
+    paidAmount: booking.paidAmount || 0,
+    dailyRate: booking.days ? round(booking.basePrice / booking.days) : 0,
+    hoursUntilPickup,
+    isDayOf,
+  });
   await updateDoc(doc(db, bookingsCol, id), {
     status: 'Cancelled',
-    cancelFee: fee,
+    cancelFee: penalty.fee,
     cancelledAt: Date.now(),
   });
-  if (booking.vehicleId && booking.status !== 'CheckedOut' && booking.status !== 'CheckedIn') {
+  if (booking.vehicleId && booking.status !== 'CheckedOut' && booking.status !== 'CheckedIn' && booking.status !== 'PendingInspection') {
     await setVehicleStatus(booking.vehicleId, 'Available');
   }
   await logBookingHistory(
     id,
     'Cancelled',
     byName || 'Guest',
-    freeWindow ? 'Cancelled within free window' : `Cancelled, fee of ${fee} applied`,
+    `Cancelled (${penalty.tier}) — ${penalty.note || penalty.tier}, fee of R${penalty.fee} applied`,
   );
-  return { fee };
+  return { fee: penalty.fee, tier: penalty.tier };
 };
 
 export const modifyCarBooking = async (id, fields, byName) => {
@@ -592,6 +704,77 @@ export const modifyCarBooking = async (id, fields, byName) => {
   return {};
 };
 
+// Guest relief: after an incident is reported, a Fleet Manager or Admin picks
+// an available unit to swap the running rental onto. The booking is re-quoted,
+// re-activated (if the incident had suspended it), and both book records and
+// the incident audit trail show the replacement.
+export const allocateReplacementVehicle = async (bookingId, { vehicleId, incidentId = '', by = 'Fleet Manager', reason = '', note = '' } = {}) => {
+  const booking = await getCarBooking(bookingId);
+  if (!booking) return { error: 'Booking not found.' };
+if (['CheckedIn', 'PendingInspection', 'Cancelled'].includes(booking.status)) {
+    return { error: `This booking is ${bookingDisplay(booking.status)} — a replacement unit can't be allocated now.` };
+  }
+  const vehicle = await getFleetVehicle(vehicleId);
+  if (!vehicle) return { error: 'Replacement vehicle not found.' };
+  if (vehicle.status !== 'Available') {
+    return { error: `Replacement unit ${vehicle.unitNumber || vehicle.name} is ${vehicle.status} — pick an available vehicle.` };
+  }
+  const quote = computeRentalQuote({
+    vehicle,
+    pickupDate: booking.pickupDate,
+    dropoffDate: booking.dropoffDate,
+    addOns: booking.addOns || [],
+    additionalDriver: booking.additionalDriver,
+    dob: booking.driverDob,
+    pickupBranchId: booking.pickupBranchId,
+    hasWaiver: booking.hasWaiver,
+  });
+  const patch = {
+    vehicleId,
+    vehicleName: vehicle.name,
+    vehicleType: vehicle.type,
+    vehicleImage: vehicle.image || '',
+    unitNumber: vehicle.unitNumber || vehicle.plateNumber || '',
+    days: quote.days,
+    basePrice: quote.base,
+    addOnTotal: quote.addOnTotal,
+    deposit: quote.deposit,
+    authorisationHoldAmount: quote.authorisationHoldAmount,
+    estimatedTotal: quote.estimatedTotal,
+    replacementVehicleId: vehicleId,
+    replacementVehicleName: vehicle.name,
+    replacementBy: by,
+    replacementReason: reason.trim(),
+    replacementNote: note.trim(),
+    replacementAllocatedAt: Date.now(),
+  };
+  if (booking.status === 'Suspended') patch.status = 'Confirmed';
+  await updateDoc(doc(db, bookingsCol, bookingId), patch);
+  await logBookingHistory(
+    bookingId,
+    patch.status || booking.status,
+    by,
+    `Replacement vehicle allocated: ${vehicle.name} (${vehicle.unitNumber || vehicle.plateNumber})${reason.trim() ? ` — reason: ${reason.trim()}` : ''}`,
+  );
+  if (incidentId) {
+    const incSnap = await getDoc(doc(db, incidentsCol, incidentId));
+    if (incSnap.exists()) {
+      await updateDoc(doc(db, incidentsCol, incidentId), {
+        replacementBookingId: bookingId,
+        replacementVehicleId: vehicleId,
+        replacementVehicleName: vehicle.name,
+        replacementBy: by,
+        replacementAt: Date.now(),
+        history: [
+          ...(incSnap.data().history || []),
+          { at: Date.now(), from: incSnap.data().status, to: 'Replacement allocated', by, note: `Replacement vehicle ${vehicle.name} (${vehicle.unitNumber || vehicle.plateNumber}) allocated to ${booking.guestName}${reason.trim() ? ` — ${reason.trim()}` : ''}` },
+        ],
+      });
+    }
+  }
+  return { ok: true, vehicleName: vehicle.name, unitNumber: vehicle.unitNumber || vehicle.plateNumber || '', estimatedTotal: quote.estimatedTotal };
+};
+
 // ---------------- Shuttle / car service requests ----------------
 
 export const computeFareEstimate = ({ serviceType, distanceKm = 0, durationMin = 0 }) => {
@@ -617,6 +800,12 @@ export const createCarService = async ({
   reservationId,
   notes,
 }) => {
+  const notice = noticePeriodCheck(serviceType, pickupDate, pickupTime);
+  if (!notice.ok) {
+    return {
+      error: `${serviceType} requests need at least ${notice.hoursRequired}h notice — this pickup is only ${Math.max(0, notice.hoursNotice)}h away.`,
+    };
+  }
   const estimatedFare = computeFareEstimate({ serviceType });
   const ref = await addDoc(collection(db, servicesCol), {
     ref: carRef('CS'),
@@ -628,12 +817,14 @@ export const createCarService = async ({
     pickupLocation,
     pickupLat: pickupLat != null ? Number(pickupLat) : null,
     pickupLng: pickupLng != null ? Number(pickupLng) : null,
+    destination: destination || '',
     pickupDate,
     pickupTime,
     paymentMethod: paymentMethod || 'Folio',
     reservationId: reservationId || '',
     notes: notes || '',
     estimatedFare,
+    confirmedBookingAmount: 0,
     distanceKm: 0,
     durationMin: 0,
     status: 'PendingAssignment',
@@ -674,6 +865,10 @@ export const getCarService = async (id) => {
 };
 
 export const assignDriverToService = async (id, { driverId, driverName, vehicleUnit, eta, assignedBy }) => {
+  const before = await getCarService(id);
+  // UC17: confirmed_booking_amount locks at confirmation (assignment) and is
+  // captured immediately — folio charge if linked to a stay, else billed direct.
+  const confirmedBookingAmount = before?.confirmedBookingAmount || before?.estimatedFare || 0;
   await updateDoc(doc(db, servicesCol, id), {
     driverId,
     driverName,
@@ -681,7 +876,16 @@ export const assignDriverToService = async (id, { driverId, driverName, vehicleU
     eta: eta || '',
     status: 'Assigned',
     assignedBy,
+    confirmedBookingAmount,
   });
+  if (before?.paymentMethod === 'Folio' && before?.reservationId) {
+    await addBillItem(before.reservationId, {
+      type: 'ChauffeurService',
+      description: `${before.serviceType}: ${before.pickupLocation || 'pickup'} → ${before.destination || 'destination'}`,
+      qty: 1,
+      unitPrice: confirmedBookingAmount,
+    });
+  }
   const ref = await getDoc(doc(db, servicesCol, id));
   const service = ref.exists() ? { id, ...ref.data() } : null;
   const history = [
@@ -691,7 +895,7 @@ export const assignDriverToService = async (id, { driverId, driverName, vehicleU
       from: service?.status || '',
       to: 'Assigned',
       by: assignedBy || 'Dispatcher',
-      note: `${driverName} assigned${vehicleUnit ? ` · ${vehicleUnit}` : ''}`,
+      note: `${driverName} assigned${vehicleUnit ? ` · ${vehicleUnit}` : ''} · confirmed amount R${confirmedBookingAmount}`,
     },
   ];
   await updateDoc(doc(db, servicesCol, id), { history });
@@ -711,12 +915,18 @@ export const cancelServiceRequest = async (id, byName) => {
   const ref = await getDoc(doc(db, servicesCol, id));
   const service = ref.exists() ? { id, ...ref.data() } : null;
   if (!service) return { error: 'Service request not found.' };
+  const pickup = new Date(`${service.pickupDate}T${service.pickupTime || '00:00'}`);
+  const hoursUntilPickup = Number.isNaN(pickup.getTime()) ? 0 : Math.max(0, (pickup.getTime() - Date.now()) / 3600000);
+  const penalty = serviceCancellationPenalty({
+    confirmedBookingAmount: service.confirmedBookingAmount || service.estimatedFare || 0,
+    hoursUntilPickup,
+  });
   const history = [
     ...(service.history || []),
-    { at: Date.now(), from: service.status || '', to: 'Cancelled', by: byName || 'Guest', note: 'Request cancelled' },
+    { at: Date.now(), from: service.status || '', to: 'Cancelled', by: byName || 'Guest', note: `Request cancelled (${penalty.tier}) — fee of R${penalty.fee} applied` },
   ];
-  await updateDoc(doc(db, servicesCol, id), { status: 'Cancelled', history });
-  return {};
+  await updateDoc(doc(db, servicesCol, id), { status: 'Cancelled', cancelFee: penalty.fee, history });
+  return { fee: penalty.fee, tier: penalty.tier };
 };
 
 // ---------------- Drivers ----------------
@@ -773,9 +983,30 @@ export const recordVehicleHandover = async ({
   notes,
   photos,
   signedBy,
+  guestSignature,
   reservationId,
   damageCheck,
+  returnBranchId,
+  waiveExtraHold = false,
+  waiveNote = '',
+  damageOverride = null,
 }) => {
+  const booking = await getCarBooking(bookingId);
+  if (!booking) return { error: 'Booking not found.' };
+
+  if (handoverType === 'CheckOut' && booking.status !== 'Confirmed') {
+    return { error: `This rental cannot be checked out while it is ${bookingDisplay(booking.status)}.` };
+  }
+  if (handoverType === 'CheckIn' && booking.status !== 'CheckedOut') {
+    return { error: `This rental cannot be checked in while it is ${bookingDisplay(booking.status)}.` };
+  }
+
+  if (handoverType === 'CheckOut') {
+    if (!guestSignature?.trim()) {
+      return { error: 'Guest co-signature is required before handover.' };
+    }
+  }
+
   const ref = await addDoc(collection(db, handoversCol), {
     bookingId,
     handoverType,
@@ -786,35 +1017,155 @@ export const recordVehicleHandover = async ({
     notes: notes || '',
     photos: photos || [],
     signedBy: signedBy || '',
+    guestSignature: guestSignature || '',
     reservationId: reservationId || '',
     damageCheck: damageCheck || null,
+    damageOverride: damageOverride || null,
     createdAt: Date.now(),
   });
 
   if (handoverType === 'CheckOut') {
+    const branch = branchById(booking.pickupBranchId);
+    let authorisationHoldAmount = Number(booking.authorisationHoldAmount) || Number(booking.deposit) || 0;
+    let extraHoldNote = '';
+    if (branch?.highRisk) {
+      if (waiveExtraHold) {
+        extraHoldNote = `High-risk extra hold waived by ${signedBy || 'Front Desk'}${waiveNote ? ` — ${waiveNote}` : ''}`;
+      } else {
+        authorisationHoldAmount = round(authorisationHoldAmount + HIGH_RISK_EXTRA_HOLD);
+        extraHoldNote = `High-risk branch — extra hold of R${HIGH_RISK_EXTRA_HOLD} applied`;
+      }
+    }
     await updateDoc(doc(db, bookingsCol, bookingId), {
       status: 'CheckedOut',
       handoverOut: { id: ref.id, fuelLevel: Number(fuelLevel), mileage: Number(mileage), at: Date.now() },
+      authorisationHoldAmount,
+      guestSignature,
     });
-    await logBookingHistory(bookingId, 'CheckedOut', signedBy, `Vehicle handed out · fuel ${fuelLevel}% · ${mileage} km`);
+    await logBookingHistory(
+      bookingId,
+      'CheckedOut',
+      signedBy,
+      `Vehicle handed out · fuel ${fuelLevel}% · ${mileage} km${extraHoldNote ? ` · ${extraHoldNote}` : ''}`,
+    );
   } else {
-    const booking = await getCarBooking(bookingId);
     const out = booking?.handoverOut || {};
     const variance = {
       fuelDelta: out.fuelLevel != null ? round((Number(out.fuelLevel) || 0) - (Number(fuelLevel) || 0)) : 0,
       mileageDelta: out.mileage != null ? Math.max(0, (Number(mileage) || 0) - (Number(out.mileage) || 0)) : 0,
-      damages: items.filter((i) => i && (i.condition === 'Damaged' || i.damaged)).map((i) => i.label || i.name),
+      damages: (items || []).filter((i) => i && (i.condition === 'Damaged' || i.damaged)).map((i) => i.label || i.name),
     };
-    await updateDoc(doc(db, bookingsCol, bookingId), {
-      status: 'CheckedIn',
-      handoverIn: { id: ref.id, fuelLevel: Number(fuelLevel), mileage: Number(mileage), at: Date.now() },
-      variance,
+    const damageDetected = variance.damages.length > 0 || damageCheck?.flagged === true;
+
+    const returnedAt = Date.now();
+    const late = lateReturnCharges({
+      scheduledDropoff: booking.dropoffDate,
+      scheduledDropoffTime: booking.dropoffTime,
+      actualReturn: returnedAt,
+      dailyRate: booking.days ? round(booking.basePrice / booking.days) : 0,
+      graceHours: LATE_RETURN_GRACE_HOURS,
     });
-    if (booking?.vehicleId) await setVehicleStatus(booking.vehicleId, 'Available');
-    await logBookingHistory(bookingId, 'CheckedIn', signedBy, `Vehicle re-checked · fuel ${fuelLevel}% · ${mileage} km`);
+    const returnTiming = {
+      status: late.status,
+      scheduled: `${booking.dropoffDate}T${booking.dropoffTime || '00:00'}`,
+      returnedAt,
+      elapsedHours: late.elapsedHours,
+      lateHours: late.lateHours,
+      graceHours: LATE_RETURN_GRACE_HOURS,
+    };
+    const fuel = fuelVarianceCharge({
+      fuelOutPct: out.fuelLevel,
+      fuelInPct: Number(fuelLevel) || 0,
+      tankLitres: booking.tankLitres,
+    });
+    const oneWay = oneWayFee(booking.pickupBranchId, returnBranchId || booking.returnBranchId);
+
+    const stamp = Date.now();
+    const pendingCharges = [];
+    if (late.total > 0) {
+      pendingCharges.push({ id: `late-day-${stamp}`, type: 'LateReturn', description: `Extra day(s) — ${late.lateDays} day(s) over (${late.lateHours}h after a ${late.graceHours}h grace)`, amount: late.extraDayFee, status: 'Held' });
+      pendingCharges.push({ id: `late-fee-${stamp}`, type: 'LateFee', description: `Late-return fee — ${late.lateDays} day(s) × R${round(late.dailyLateFee / late.lateDays)}`, amount: late.dailyLateFee, status: 'Held' });
+    }
+    if (fuel.total > 0) {
+      pendingCharges.push({ id: `fuel-${stamp}`, type: 'Fuel', description: `Fuel shortfall — ${fuel.shortfallLitres}L`, amount: fuel.fuelCost, status: 'Held' });
+      pendingCharges.push({ id: `refuel-${stamp}`, type: 'RefuelFee', description: 'Refuelling service fee', amount: fuel.serviceFee, status: 'Held' });
+    }
+    if (oneWay > 0) {
+      pendingCharges.push({ id: `oneway-${stamp}`, type: 'OneWay', description: `One-way fee (${booking.pickupBranchId} → ${returnBranchId || booking.returnBranchId})`, amount: oneWay, status: 'Held' });
+    }
+
+    await updateDoc(doc(db, bookingsCol, bookingId), {
+      status: 'PendingInspection',
+      handoverIn: { id: ref.id, fuelLevel: Number(fuelLevel), mileage: Number(mileage), at: returnedAt },
+      returnBranchId: returnBranchId || booking.returnBranchId || booking.pickupBranchId,
+      variance: { ...variance, damageDetected },
+      returnTiming,
+      pendingCharges: [...(booking.pendingCharges || []), ...pendingCharges],
+    });
+    // UC15: the vehicle stays UNAVAILABLE until the post-rental inspection is completed
+    // (finalized later → Available or InMaintenance). Repairs queued from damage already
+    // have a work order created below while the unit waits for inspection.
+    if (booking?.vehicleId) await setVehicleStatus(booking.vehicleId, 'PendingInspection');
+    await logBookingHistory(bookingId, 'PendingInspection', signedBy, `Vehicle re-checked · return ${late.status} (${late.elapsedHours}h vs scheduled) · fuel ${fuelLevel}% · ${mileage} km · ${pendingCharges.length} item(s) held for review · awaiting post-rental inspection`);
+
+    // Damage detected → automatically open a repair work order so the damage is
+    // visible in the maintenance register; the unit is released/blocked once the
+    // post-rental inspection is finalized.
+    let workOrder = null;
+    if (damageDetected && booking.vehicleId) {
+      const woRes = await createFleetWorkOrder({
+        source: 'CheckIn',
+        title: `Damage at check-in — ${booking.vehicleName || 'vehicle'}`,
+        description: [
+          variance.damages.length ? `Damages recorded on check-in: ${variance.damages.join(', ')}` : 'Damage flagged by pixel comparison at check-in.',
+          notes ? `Notes: ${notes}` : '',
+          damageCheck?.flagged ? 'Pixel comparison flagged a visual difference.' : '',
+        ].filter(Boolean).join(' · '),
+        vehicleId: booking.vehicleId,
+        vehicleName: booking.vehicleName || '',
+        unitNumber: unitNumber || booking.unitNumber || '',
+        priority: damageCheck?.flagged ? 'High' : 'Normal',
+        handoverId: ref.id,
+        handoverType: 'CheckIn',
+        bookingId,
+        createdBy: signedBy || 'Front Desk',
+      });
+      if (!woRes?.error) workOrder = woRes;
+    }
+    return { id: ref.id, damageDetected, damageDetails: variance.damages, workOrder, finalizedCharges: pendingCharges, returnTiming };
   }
   return { id: ref.id };
 };
+
+// UC15 step 7 → 8: the Post-Rental Inspection is completed by staff. Booking is
+// finalized (CheckedIn), the vehicle is returned to service (or sent to
+// maintenance when the return flagged damage), and pending charges are presented.
+export const finalizePostRentalInspection = async (bookingId, { qualifiedBy = 'Front Desk', notes = '' }) => {
+  const booking = await getCarBooking(bookingId);
+  if (!booking) return { error: 'Booking not found.' };
+  if (booking.status !== 'PendingInspection') {
+    return { error: `This rental is ${bookingDisplay(booking.status)} — not awaiting a post-rental inspection.` };
+  }
+  const damageDetected = booking.variance?.damageDetected === true;
+  const vehicleStatus = damageDetected ? 'InMaintenance' : 'Available';
+  if (booking.vehicleId) await setVehicleStatus(booking.vehicleId, vehicleStatus);
+  await updateDoc(doc(db, bookingsCol, bookingId), {
+    status: 'CheckedIn',
+    finalizedBy: qualifiedBy,
+    finalizedAt: Date.now(),
+    finalizedNotes: notes.trim(),
+    finalizedVehicleStatus: vehicleStatus,
+  });
+  await logBookingHistory(bookingId, 'CheckedIn', qualifiedBy, `Post-rental inspection passed by ${qualifiedBy} — vehicle ${vehicleStatus}${notes.trim() ? ` · ${notes.trim()}` : ''}`);
+  return { ok: true, damageDetected, vehicleStatus };
+};
+
+export const subscribeVehicleHandovers = (cb) =>
+  onSnapshot(
+    query(collection(db, handoversCol)),
+    (snap) => cb(snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))),
+    (err) => console.error('vehicleHandovers listener error', err),
+  );
 
 export const listVehicleHandovers = async () => {
   const snap = await getDocs(query(collection(db, handoversCol)));
@@ -841,6 +1192,44 @@ export const postBookingChargeToBill = async (bookingId, { amount, description, 
   const finalCharges = round((booking.finalCharges || 0) + Number(amount));
   await updateDoc(doc(db, bookingsCol, bookingId), { finalCharges });
   return { ok: true, finalCharges };
+};
+
+// UC16 joint sign-off: a pending (Held) charge is either accepted (posted to
+// the folio/capturedAmount) or disputed (stays held, escalates to Fleet
+// Manager) — nothing is billed automatically.
+export const reviewPendingCharge = async (bookingId, itemId, { action, by, note = '' }) => {
+  const booking = await getCarBooking(bookingId);
+  if (!booking) return { error: 'Booking not found.' };
+  const pendingCharges = booking.pendingCharges || [];
+  const idx = pendingCharges.findIndex((i) => i.id === itemId);
+  if (idx === -1) return { error: 'Charge item not found.' };
+  const item = pendingCharges[idx];
+  if (item.status !== 'Held') return { error: `This item is already ${item.status}.` };
+
+  const updated = [...pendingCharges];
+  if (action === 'accept') {
+    updated[idx] = { ...item, status: 'Posted' };
+    if (booking.reservationId) {
+      await addBillItem(booking.reservationId, {
+        type: item.type || 'CarRental',
+        description: `${item.description} (${booking.vehicleName})`,
+        qty: 1,
+        unitPrice: item.amount,
+      });
+    }
+    const finalCharges = round((booking.finalCharges || 0) + Number(item.amount));
+    const capturedAmount = round((booking.capturedAmount || 0) + Number(item.amount));
+    await updateDoc(doc(db, bookingsCol, bookingId), { pendingCharges: updated, finalCharges, capturedAmount });
+    await logBookingHistory(bookingId, booking.status, by || 'Guest', `Charge accepted: ${item.description} (R${item.amount})`);
+    return { ok: true, finalCharges, capturedAmount };
+  }
+  if (action === 'dispute') {
+    updated[idx] = { ...item, status: 'Disputed', disputeNote: note };
+    await updateDoc(doc(db, bookingsCol, bookingId), { pendingCharges: updated });
+    await logBookingHistory(bookingId, booking.status, by || 'Guest', `Charge disputed: ${item.description}${note ? ` — ${note}` : ''}`);
+    return { ok: true };
+  }
+  return { error: `Unknown action ${action}.` };
 };
 
 export const recordBookingPayment = async (bookingId, { amount, byName }) => {
@@ -889,10 +1278,18 @@ export const computeFleetStats = ({ vehicles = [], bookings = [], services = [],
   openWorkOrders: workOrders.filter((w) => !['SignedOff', 'Cancelled'].includes(w.status)).length,
   awaitingPartsOrders: workOrders.filter((w) => w.status === 'AwaitingParts').length,
   pendingConfirmations: bookings.filter((b) => b.status === 'PendingConfirmation').length,
+  pendingInspections: bookings.filter((b) => b.status === 'PendingInspection').length,
   confirmedActive: bookings.filter((b) => ['Confirmed', 'CheckedOut'].includes(b.status)).length,
   pendingServices: services.filter((s) => s.status === 'PendingAssignment').length,
   activeTrips: services.filter((s) => ['Assigned', 'EnRoute', 'Arrived'].includes(s.status)).length,
   availableDrivers: drivers.filter((d) => d.available !== false).length,
+  documentsNeedingReview: bookings.filter((b) => b.documentReviewRequired && b.status === 'PendingConfirmation').length,
+  highRiskOverridesPending: bookings.filter((b) => b.riskFlag && b.status === 'PendingConfirmation').length,
+  chargesAwaitingGuestResponse: bookings.reduce((s, b) => s + (b.pendingCharges || []).filter((c) => c.status === 'Held').length, 0),
+  incidentsAwaitingGuestResponse: incidents.filter((i) => i.status === 'PendingGuestReview').length,
+  awaitingHotelManagerSignoff:
+    workOrders.filter((w) => w.status === 'AwaitingApproval').length +
+    incidents.filter((i) => i.escalationTier === 'FleetManager+HotelManager' && i.status !== 'Resolved').length,
 });
 
 export const fleetDashboardStats = async () => {
@@ -1007,6 +1404,7 @@ export const createFleetIncident = async ({
   serviceId = '',
   vehicleId = '',
   vehicleName = '',
+  vehicleImage = '',
   evidence = [],
 }) => {
   if (!reporterUid || !category || !description?.trim()) return { error: 'Reporter, category and a description are required.' };
@@ -1031,9 +1429,12 @@ export const createFleetIncident = async ({
     serviceId,
     vehicleId,
     vehicleName,
+    vehicleImage,
     severity: triage.level,
     flags: triage.flags,
     escalated: triage.escalated,
+    // UC19: severe incidents dual-notify Fleet Manager and Hotel Manager at once.
+    escalationTier: triage.level === 'High' ? 'FleetManager+HotelManager' : 'FleetManager',
     status: triage.escalated ? 'Suspended' : 'Open',
     evidence: (evidence || []).map((e) => ({ name: e.name || 'photo', checksum: e.checksum || '', dataUrl: e.dataUrl || '', addedAt: Date.now() })),
     liability: '',
@@ -1077,19 +1478,65 @@ export const updateFleetIncident = async (id, { patch = {}, by = 'System', note 
   return { ok: true };
 };
 
-export const determineIncidentLiability = async (id, { liability = 'Undetermined', charge = 0, description = '', byName = 'System', reservationId = '' } = {}) => {
+// UC19 §9.1: liability is proposed here but not billed yet — the guest must
+// accept or dispute it (resolveIncidentReview) before anything posts, same
+// held-charge pattern as UC16. Repair costs only flow to the guest when
+// liability is assigned to them; normal wear/mechanical/third-party stays an
+// internal fleet-maintenance cost with no guest charge at all.
+export const determineIncidentLiability = async (id, { liability = 'Undetermined', repairEstimate = 0, description = '', byName = 'System', chargeLines = [] } = {}) => {
   const snap = await getDoc(doc(db, incidentsCol, id));
   if (!snap.exists()) return { error: 'Incident not found.' };
   const incident = { id, ...snap.data() };
-  const patch = { liability, resolutionNote: description, status: 'Resolved', resolvedAt: Date.now(), chargeAmount: 0 };
-  if (Number(charge) > 0) {
-    const res = await postBookingChargeToBill(incident.bookingId, { amount: Number(charge), description: description || `Incident ${incident.ref}: ${incident.category}`, reservationId });
-    if (res?.error) return res;
-    patch.chargeAmount = Number(charge);
-  }
-  const history = [...(incident.history || []), { at: Date.now(), from: incident.status, to: 'Resolved', by: byName, note: `Liability: ${liability}${charge ? ` · charged ${round(Number(charge))}` : ''}` }];
+  const guestLiable = liability === 'Guest fault';
+  const lines = (chargeLines || [])
+    .filter((l) => l && (l.label || '').trim() && Number(l.amount) > 0)
+    .map((l) => ({ label: String(l.label).trim(), amount: Math.round(Number(l.amount) * 100) / 100 }));
+  const lineTotal = lines.reduce((s, l) => s + l.amount, 0);
+  const estimate = guestLiable ? (lineTotal > 0 ? lineTotal : Number(repairEstimate) || 0) : 0;
+  const adminFee = estimate > 0 ? accidentAdminFee(estimate) : 0;
+  const chargeAmount = round(estimate + adminFee);
+  const patch = {
+    liability,
+    resolutionNote: description,
+    chargeLines: lines,
+    repairEstimate: estimate,
+    adminFee,
+    chargeAmount,
+    status: 'PendingGuestReview',
+  };
+  const history = [
+    ...(incident.history || []),
+    { at: Date.now(), from: incident.status, to: 'PendingGuestReview', by: byName, note: `Liability determined: ${liability}${chargeAmount ? ` · proposed charge R${chargeAmount} (repair R${estimate} + admin fee R${adminFee})` : ' · no guest charge'}` },
+  ];
   await updateDoc(doc(db, incidentsCol, id), { ...patch, history });
-  return { ok: true, chargeAmount: patch.chargeAmount };
+  return { ok: true, chargeAmount };
+};
+
+export const resolveIncidentReview = async (id, { action, by = 'Guest', reservationId = '' } = {}) => {
+  const snap = await getDoc(doc(db, incidentsCol, id));
+  if (!snap.exists()) return { error: 'Incident not found.' };
+  const incident = { id, ...snap.data() };
+  if (incident.status !== 'PendingGuestReview') return { error: `Incident is not awaiting review (status: ${incident.status}).` };
+
+  if (action === 'accept') {
+    if (Number(incident.chargeAmount) > 0) {
+      const res = await postBookingChargeToBill(incident.bookingId, {
+        amount: Number(incident.chargeAmount),
+        description: `Incident ${incident.ref}: ${incident.category} (repair R${incident.repairEstimate} + admin fee R${incident.adminFee})`,
+        reservationId,
+      });
+      if (res?.error) return res;
+    }
+    const history = [...(incident.history || []), { at: Date.now(), from: incident.status, to: 'Resolved', by, note: 'Guest accepted liability & charge' }];
+    await updateDoc(doc(db, incidentsCol, id), { status: 'Resolved', resolvedAt: Date.now(), history });
+    return { ok: true, chargeAmount: incident.chargeAmount };
+  }
+  if (action === 'dispute') {
+    const history = [...(incident.history || []), { at: Date.now(), from: incident.status, to: 'Adjudicating', by, note: 'Guest disputed liability — routed to Fleet Manager for adjudication' }];
+    await updateDoc(doc(db, incidentsCol, id), { status: 'Adjudicating', history });
+    return { ok: true };
+  }
+  return { error: `Unknown action ${action}.` };
 };
 
 // ---------------- Work orders & repair/maintenance (4.20) ----------------
@@ -1127,6 +1574,9 @@ const workOrderDoc = (data) => ({
   estimatedCost: Number(data.estimatedCost) || 0,
   finalCost: 0,
   incidentId: data.incidentId || '',
+  handoverId: data.handoverId || '',
+  handoverType: data.handoverType || '',
+  bookingId: data.bookingId || '',
   checklist: data.checklist || {},
   completedAt: null,
   closedAt: null,
@@ -1144,14 +1594,17 @@ export const createFleetWorkOrder = async (data) => {
   if (data.incidentId) {
     await updateFleetIncident(data.incidentId, { patch: { linkedWorkOrderId: ref.id, status: 'UnderReview' }, by: data.createdBy || 'System', note: 'Work order linked from incident' });
   }
-  return { id: ref.id, status: base.status };
+  return { id: ref.id, ref: base.ref, status: base.status };
 };
 
 export const openWorkOrderFromIncident = async (incidentId, { createdBy = 'System' } = {}) => {
   const snap = await getDoc(doc(db, incidentsCol, incidentId));
   if (!snap.exists()) return { error: 'Incident not found.' };
   const incident = { id: incidentId, ...snap.data() };
-  if (incident.linkedWorkOrderId && !incident.vehicleId) return null;
+  if (incident.linkedWorkOrderId) {
+    return { id: incident.linkedWorkOrderId, existing: true };
+  }
+  if (!incident.vehicleId) return { error: 'This incident is not linked to a vehicle, so a repair work order cannot be opened.' };
   return createFleetWorkOrder({
     source: 'Incident',
     title: `${incident.category} — ${incident.vehicleName || 'vehicle'}`,
@@ -1173,7 +1626,7 @@ export const updateFleetWorkOrder = async (id, { patch = {}, by = 'System', note
   return { ok: true };
 };
 
-export const advanceFleetWorkOrder = async (id, to, { by = 'System', note = '', checklist = null, parts = null } = {}) => {
+export const advanceFleetWorkOrder = async (id, to, { by = 'System', note = '', checklist = null, parts = null, finalCost = null, mileageAtCompletion = null } = {}) => {
   const snap = await getDoc(doc(db, workOrdersCol, id));
   if (!snap.exists()) return { error: 'Work order not found.' };
   const wo = snap.data();
@@ -1185,6 +1638,32 @@ export const advanceFleetWorkOrder = async (id, to, { by = 'System', note = '', 
     if (!ok) return { error: 'Return-to-service checklist must pass every item before completion.' };
     patch.checklist = checklist;
     patch.completedAt = Date.now();
+    patch.finalCost = Number(finalCost) || Number(wo.estimatedCost) || 0;
+    if (mileageAtCompletion) patch.mileageAtCompletion = Number(mileageAtCompletion);
+
+    // Damage repaired from a check-in inspection is billed back to the guest whose
+    // rental caused it — same Held/accept/dispute review as late & fuel charges.
+    if (wo.source === 'CheckIn' && wo.bookingId && patch.finalCost > 0) {
+      const booking = await getCarBooking(wo.bookingId);
+      if (booking) {
+        const chargeId = `damage-${id}`;
+        const alreadyCharged = (booking.pendingCharges || []).some((c) => c.id === chargeId);
+        if (!alreadyCharged) {
+          const pendingCharges = [
+            ...(booking.pendingCharges || []),
+            {
+              id: chargeId,
+              type: 'DamageRepair',
+              description: `Damage repair — ${wo.ref} (${wo.title || 'vehicle damage'})`,
+              amount: patch.finalCost,
+              status: 'Held',
+            },
+          ];
+          await updateDoc(doc(db, bookingsCol, wo.bookingId), { pendingCharges });
+          await logBookingHistory(wo.bookingId, booking.status, by, `Repair completed on ${wo.ref} — damage charge of R${patch.finalCost} held for your review`);
+        }
+      }
+    }
   }
   if (parts && parts.length) patch.parts = parts;
   if (to === 'SignedOff') {

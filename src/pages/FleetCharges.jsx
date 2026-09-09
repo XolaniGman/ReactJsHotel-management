@@ -5,7 +5,7 @@ import {
   listCarBookings,
   listCarServices,
   listVehicleHandovers,
-  postBookingChargeToBill,
+  reviewPendingCharge,
   recordBookingPayment,
   recordServicePayment,
   bookingDisplay,
@@ -21,8 +21,8 @@ export default function FleetCharges() {
   const [bookings, setBookings] = useState([]);
   const [services, setServices] = useState([]);
   const [handovers, setHandovers] = useState([]);
-  const [charges, setCharges] = useState({});
   const [payments, setPayments] = useState({});
+  const [disputeNote, setDisputeNote] = useState({});
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const isManager = ['fleetmanager', 'admin', 'system'].includes(user?.role);
@@ -36,20 +36,42 @@ export default function FleetCharges() {
 
   useEffect(() => { load(); }, []);
 
-  const billable = bookings.filter((b) => ['Confirmed', 'CheckedOut', 'CheckedIn'].includes(b.status));
+  const billable = bookings.filter((b) => ['Confirmed', 'CheckedOut', 'PendingInspection', 'CheckedIn'].includes(b.status));
   const completedServices = services.filter((s) => s.status === 'Completed');
 
-  const postToFolio = async (booking) => {
-    const amount = Number(charges[booking.id]);
-    if (!amount || amount <= 0) return setError('Enter a charge amount before posting.');
-    const result = await postBookingChargeToBill(booking.id, {
-      amount,
-      description: `Car rental: ${booking.vehicleName} (${booking.ref})`,
-      reservationId: booking.reservationId,
+  const bookingBalance = (booking) => Math.max(
+    0,
+    Number(booking.estimatedTotal || 0) + Number(booking.finalCharges || 0) - Number(booking.paidAmount || 0),
+  );
+
+  const serviceBalance = (service) => Math.max(
+    0,
+    Number(service.confirmedBookingAmount || service.estimatedFare || 0) - Number(service.paidAmount || 0),
+  );
+
+  useEffect(() => {
+    setPayments((current) => {
+      const next = { ...current };
+      bookings.filter((booking) => ['Confirmed', 'CheckedOut', 'PendingInspection', 'CheckedIn'].includes(booking.status)).forEach((booking) => {
+        if (next[booking.id] === undefined || next[booking.id] === '') next[booking.id] = bookingBalance(booking) || '';
+      });
+      services.filter((service) => service.status === 'Completed').forEach((service) => {
+        const key = `svc-${service.id}`;
+        if (next[key] === undefined || next[key] === '') next[key] = serviceBalance(service) || '';
+      });
+      return next;
+    });
+  }, [bookings, services]);
+
+  const reviewCharge = async (booking, item, action) => {
+    const result = await reviewPendingCharge(booking.id, item.id, {
+      action,
+      by: user.name,
+      note: action === 'dispute' ? disputeNote[item.id] : '',
     });
     setError('');
     if (result?.error) return setError(result.error);
-    setNotice(`Charge of ${formatPrice(amount)} posted to the guest folio.`);
+    setNotice(action === 'accept' ? `Charge accepted & posted: ${item.description}.` : `Charge disputed and held: ${item.description}.`);
     await load();
   };
 
@@ -57,26 +79,19 @@ export default function FleetCharges() {
     const key = kind === 'booking' ? item.id : `svc-${item.id}`;
     const amount = Number(payments[key]);
     if (!amount || amount <= 0) return setError('Enter a payment amount.');
+    const balance = kind === 'booking' ? bookingBalance(item) : serviceBalance(item);
+    if (amount > balance) return setError(`Payment cannot exceed the outstanding balance of ${formatPrice(balance)}.`);
     if (kind === 'booking') {
       await recordBookingPayment(item.id, { amount, byName: `${user.name} (${bookingDisplay(item.status)})` });
     } else {
       await recordServicePayment(item.id, { amount, byName: `${user.name} (Trip fare)` });
     }
+    setPayments((current) => ({ ...current, [key]: '' }));
     setError('');
     setNotice(`Payment of ${formatPrice(amount)} recorded against ${item.ref}.`);
     await load();
   };
 
-  const overrides = (booking) => {
-    const out = booking.handoverOut;
-    const inn = booking.handoverIn;
-    if (!out || !inn) return null;
-    const lines = [];
-    if (booking.variance?.fuelDelta > 0) lines.push(`Fuel shortfall: R${booking.variance.fuelDelta * 8}`);
-    if (booking.variance?.damages?.length) lines.push(`Damages: ${booking.variance.damages.join(', ')}`);
-    if (booking.variance?.mileageDelta > 100) lines.push('Excess mileage: chargeable');
-    return lines;
-  };
 
   return (
     <div className="maint-dash-bg">
@@ -105,14 +120,14 @@ export default function FleetCharges() {
           <div className="table-responsive">
             <table className="task-table">
               <thead>
-                <tr><th>Booking</th><th>Guest / vehicle</th><th>Est. total</th><th>Variance</th><th>Post charge</th><th>Record payment</th></tr>
+                <tr><th>Booking</th><th>Guest / vehicle</th><th>Est. total</th><th>Itemized charges</th><th>Record payment</th></tr>
               </thead>
               <tbody>
                 {billable.length === 0 ? (
-                  <tr><td colSpan="6" className="text-center py-5 text-muted">No rentals ready to bill.</td></tr>
+                  <tr><td colSpan="5" className="text-center py-5 text-muted">No rentals ready to bill.</td></tr>
                 ) : (
                   billable.map((b) => {
-                    const lines = overrides(b);
+                    const pendingCharges = b.pendingCharges || [];
                     return (
                       <tr key={b.id}>
                         <td>
@@ -125,26 +140,45 @@ export default function FleetCharges() {
                         </td>
                         <td>
                           <div className="task-name">{formatPrice(b.estimatedTotal)}</div>
-                          <div className="task-sub">Paid: {formatPrice(b.paidAmount || 0)}</div>
+                          <div className="task-sub">Final charges: {formatPrice(b.finalCharges || 0)}</div>
+                          <div className="fleet-auto-balance">Balance: {formatPrice(bookingBalance(b))}</div>
                         </td>
-                        <td>
-                          {lines ? (
-                            lines.map((l) => <div className="task-sub text-danger" key={l}>{l}</div>)
+                        <td style={{ minWidth: 280 }}>
+                          {pendingCharges.length === 0 ? (
+                            <span className="task-sub text-success"><i className="bi bi-check-circle me-1" />No items held</span>
                           ) : (
-                            <span className="task-sub text-success"><i className="bi bi-check-circle me-1" />No variance recorded</span>
+                            pendingCharges.map((item) => (
+                              <div className="fleet-charge-item" key={item.id}>
+                                <div className="flex-grow-1">
+                                  <div className="task-sub">{item.description}</div>
+                                  <strong>{formatPrice(item.amount)}</strong>{' '}
+                                  <span className={`fleet-charge-status ${item.status}`}>{item.status}</span>
+                                  {item.status === 'Held' && (
+                                    <input
+                                      type="text"
+                                      className="form-control form-control-sm mt-1"
+                                      placeholder="Dispute note (optional)"
+                                      value={disputeNote[item.id] || ''}
+                                      onChange={(e) => setDisputeNote({ ...disputeNote, [item.id]: e.target.value })}
+                                    />
+                                  )}
+                                </div>
+                                {item.status === 'Held' && (
+                                  <div className="d-flex gap-1">
+                                    <button type="button" className="btn btn-sm btn-success" onClick={() => reviewCharge(b, item, 'accept')}>Accept</button>
+                                    <button type="button" className="btn btn-sm btn-outline-danger" onClick={() => reviewCharge(b, item, 'dispute')}>Dispute</button>
+                                  </div>
+                                )}
+                              </div>
+                            ))
                           )}
                         </td>
                         <td>
                           <div className="d-flex gap-1">
-                            <input type="number" min="0" className="form-control form-control-sm" style={{ width: 100 }} placeholder="Amount" value={charges[b.id] || ''} onChange={(e) => setCharges({ ...charges, [b.id]: e.target.value })} />
-                            <button type="button" className="btn-request-start btn-request-done" onClick={() => postToFolio(b)}>Post to folio</button>
-                          </div>
-                        </td>
-                        <td>
-                          <div className="d-flex gap-1">
-                            <input type="number" min="0" className="form-control form-control-sm" style={{ width: 100 }} placeholder="Amount" value={payments[b.id] || ''} onChange={(e) => setPayments({ ...payments, [b.id]: e.target.value })} />
+                            <input type="number" min="0" className="form-control form-control-sm" style={{ width: 100 }} placeholder="Auto" value={payments[b.id] || ''} onChange={(e) => setPayments({ ...payments, [b.id]: e.target.value })} />
                             <button type="button" className="btn-request-complete btn-request-done" onClick={() => recordPay(b, 'booking')}>Record</button>
                           </div>
+                          <div className="fleet-auto-note"><i className="bi bi-stars me-1" />Auto-calculated from rental, approved charges and payments</div>
                         </td>
                       </tr>
                     );
@@ -177,12 +211,16 @@ export default function FleetCharges() {
                       </td>
                       <td className="task-name">{s.guestName}</td>
                       <td className="task-name">{s.driverName || '—'}</td>
-                      <td className="task-name">{formatPrice(s.estimatedFare)}</td>
+                      <td>
+                        <div className="task-name">{formatPrice(s.confirmedBookingAmount || s.estimatedFare)}</div>
+                        <div className="fleet-auto-balance">Balance: {formatPrice(serviceBalance(s))}</div>
+                      </td>
                       <td>
                         <div className="d-flex gap-1">
-                          <input type="number" min="0" className="form-control form-control-sm" style={{ width: 100 }} placeholder="Amount" value={payments[`svc-${s.id}`] || ''} onChange={(e) => setPayments({ ...payments, [`svc-${s.id}`]: e.target.value })} />
+                          <input type="number" min="0" className="form-control form-control-sm" style={{ width: 100 }} placeholder="Auto" value={payments[`svc-${s.id}`] || ''} onChange={(e) => setPayments({ ...payments, [`svc-${s.id}`]: e.target.value })} />
                           <button type="button" className="btn-request-complete btn-request-done" onClick={() => recordPay(s, 'service')}>Record</button>
                         </div>
+                        <div className="fleet-auto-note"><i className="bi bi-stars me-1" />Auto-calculated balance</div>
                       </td>
                     </tr>
                   ))

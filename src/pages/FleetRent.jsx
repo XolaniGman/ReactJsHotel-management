@@ -6,7 +6,7 @@ import { listUserReservations } from '../services/reservationService';
 import { scanLicence } from '../services/ocr';
 import { smartMatchVehicles } from '../lib/fleetAlgo';
 import { formatPrice, todayISO, addDaysISO, nightsBetween, formatGuestDate } from '../lib/utils';
-import { CAR_RENTAL_ADDONS } from '../lib/constants';
+import { CAR_RENTAL_ADDONS, ADDITIONAL_DRIVER_FEE, FLEET_BRANCHES } from '../lib/constants';
 import './guest.css';
 import './rooms.css';
 import './fleet.css';
@@ -32,6 +32,11 @@ export default function FleetRent() {
   const [submitting, setSubmitting] = useState(false);
   const [scannerBusy, setScannerBusy] = useState(false);
   const [scanNote, setScanNote] = useState('');
+  const [documentReviewRequired, setDocumentReviewRequired] = useState(false);
+  const [additionalDriver, setAdditionalDriver] = useState(false);
+  const [driverDob, setDriverDob] = useState('');
+  const [pickupBranchId, setPickupBranchId] = useState('main');
+  const [returnBranchId, setReturnBranchId] = useState('main');
   const fileInputRef = useRef(null);
 
   const activeRes = reservations.find((r) => ['Approved', 'CheckedIn'].includes(r.status));
@@ -57,9 +62,14 @@ export default function FleetRent() {
 
   const days = Math.max(1, nightsBetween(pickupDate, dropoffDate) || 1);
 
+  const hasWaiver = selectedAddons.includes('Collision Waiver');
+
   const quote = useMemo(
-    () => (vehicle ? computeRentalQuote({ vehicle, pickupDate, dropoffDate, addOns }) : null),
-    [vehicle, pickupDate, dropoffDate, addOns],
+    () =>
+      vehicle
+        ? computeRentalQuote({ vehicle, pickupDate, dropoffDate, addOns, additionalDriver, dob: driverDob, pickupBranchId, hasWaiver })
+        : null,
+    [vehicle, pickupDate, dropoffDate, addOns, additionalDriver, driverDob, pickupBranchId, hasWaiver],
   );
 
   const rankedFleet = useMemo(
@@ -78,11 +88,18 @@ export default function FleetRent() {
     setScannerBusy(false);
     if (result?.error || !result?.confidence) {
       setScanNote('Could not read the licence — please type the details manually.');
+      setDocumentReviewRequired(true);
       return;
     }
     if (result.licenseNumber) setLicenseNumber(result.licenseNumber);
     if (result.licenseExpiry) setLicenseExpiry(result.licenseExpiry);
-    setScanNote(`Read at ${Math.round(result.confidence * 100)}% confidence${result.licenseExpiry ? '' : ' — enter the expiry date manually'}`);
+    if (result.dob) setDriverDob(result.dob);
+    const lowConfidence = result.confidence < 0.6;
+    setDocumentReviewRequired(lowConfidence);
+    setScanNote(
+      `Read at ${Math.round(result.confidence * 100)}% confidence${result.licenseExpiry ? '' : ' — enter the expiry date manually'}` +
+        (lowConfidence ? ' — low confidence, Front Desk will verify this before pickup' : ''),
+    );
   };
 
   const submit = async (e) => {
@@ -108,6 +125,12 @@ export default function FleetRent() {
       addOns,
       reservationId: reservationId || activeRes?.id || '',
       notes,
+      additionalDriver,
+      driverDob,
+      pickupBranchId,
+      returnBranchId,
+      hasWaiver,
+      documentReviewRequired,
     });
     setSubmitting(false);
     if (result?.error) return setError(result.error);
@@ -218,6 +241,21 @@ export default function FleetRent() {
                     <label className="book-label" htmlFor="DropoffTime">Drop-off time</label>
                     <input id="DropoffTime" type="time" className="form-control book-input" value={dropoffTime} onChange={(e) => setDropoffTime(e.target.value)} />
                   </div>
+                  <div className="col-md-6">
+                    <label className="book-label" htmlFor="PickupBranch">Pick-up branch</label>
+                    <select id="PickupBranch" className="form-select book-input" value={pickupBranchId} onChange={(e) => setPickupBranchId(e.target.value)}>
+                      {FLEET_BRANCHES.map((b) => <option key={b.id} value={b.id}>{b.name}{b.locationSurcharge ? ` (+${formatPrice(b.locationSurcharge)})` : ''}</option>)}
+                    </select>
+                  </div>
+                  <div className="col-md-6">
+                    <label className="book-label" htmlFor="ReturnBranch">Return branch</label>
+                    <select id="ReturnBranch" className="form-select book-input" value={returnBranchId} onChange={(e) => setReturnBranchId(e.target.value)}>
+                      {FLEET_BRANCHES.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                    </select>
+                    {returnBranchId !== pickupBranchId && (
+                      <div className="text-muted small mt-1"><i className="bi bi-info-circle me-1" />A one-way fee applies for a different return branch — charged on return.</div>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -231,6 +269,20 @@ export default function FleetRent() {
                   <div className="col-md-6">
                     <label className="book-label" htmlFor="LicenseExpiry">Licence expiry</label>
                     <input id="LicenseExpiry" type="date" className="form-control book-input" value={licenseExpiry} onChange={(e) => setLicenseExpiry(e.target.value)} />
+                  </div>
+                  <div className="col-md-6">
+                    <label className="book-label" htmlFor="DriverDob">Driver date of birth</label>
+                    <input id="DriverDob" type="date" className="form-control book-input" value={driverDob} onChange={(e) => setDriverDob(e.target.value)} />
+                    <div className="text-muted small mt-1">Drivers under 25 attract a young-driver surcharge.</div>
+                  </div>
+                  <div className="col-12">
+                    <label className="d-flex justify-content-between align-items-center border rounded-3 p-3">
+                      <div>
+                        <strong>Additional driver</strong>
+                        <div className="text-muted small">{formatPrice(ADDITIONAL_DRIVER_FEE)} flat, per rental</div>
+                      </div>
+                      <input type="checkbox" className="form-check-input" checked={additionalDriver} onChange={(e) => setAdditionalDriver(e.target.checked)} />
+                    </label>
                   </div>
                   <div className="col-12">
                     <div className="d-flex gap-2 flex-wrap align-items-center">
@@ -267,7 +319,10 @@ export default function FleetRent() {
                       <label className="d-flex justify-content-between align-items-center border rounded-3 p-3">
                         <div>
                           <strong>{a.name}</strong>
-                          <div className="text-muted small">{formatPrice(a.price)} / rental</div>
+                          <div className="text-muted small">
+                            {formatPrice(a.price)} / rental
+                            {a.name === 'Collision Waiver' && ' — lowers your liability cap, not your deposit'}
+                          </div>
                         </div>
                         <input type="checkbox" className="form-check-input" checked={selectedAddons.includes(a.name)} onChange={() => toggleAddon(a.name)} />
                       </label>
@@ -299,13 +354,17 @@ export default function FleetRent() {
                   <div className="text-muted small mt-1" style={{ fontSize: '0.72rem' }}>{quote.dynamicReasons.join(' · ')}</div>
                 )}
                 <div className="fleet-quote-row mt-2"><span className="text-muted">{days} day{days > 1 ? 's' : ''} × rate</span><strong>{formatPrice(quote?.base)}</strong></div>
-                <div className="fleet-quote-row mt-2"><span className="text-muted">Add-ons ({addOns.length})</span><strong>{formatPrice(quote?.addOnTotal)}</strong></div>
+                {addOns.length > 0 && <div className="fleet-quote-row mt-2"><span className="text-muted">Add-ons ({addOns.length})</span><strong>{formatPrice(quote?.addOnTotal)}</strong></div>}
+                {additionalDriver && <div className="fleet-quote-row mt-2"><span className="text-muted">Additional driver</span><strong>{formatPrice(quote?.additionalDriverAmount)}</strong></div>}
+                {quote?.youngDriverAmount > 0 && <div className="fleet-quote-row mt-2"><span className="text-muted">Young-driver surcharge</span><strong>{formatPrice(quote?.youngDriverAmount)}</strong></div>}
+                {quote?.locationAmount > 0 && <div className="fleet-quote-row mt-2"><span className="text-muted">Location surcharge</span><strong>{formatPrice(quote?.locationAmount)}</strong></div>}
+                <div className="fleet-quote-row mt-2"><span className="text-muted">Liability cap {hasWaiver ? '(waived)' : ''}</span><strong>{formatPrice(quote?.liabilityCap)}</strong></div>
                 <div className="fleet-quote-row mt-2"><span className="text-muted">Refundable deposit</span><strong>{formatPrice(quote?.deposit)}</strong></div>
                 <div className="fleet-quote-total">
-                  <span>Estimated total (incl. deposit)</span>
-                  <span className="amount">{formatPrice(quote?.estimatedTotal)}</span>
+                  <span>Authorisation hold today</span>
+                  <span className="amount">{formatPrice(quote?.authorisationHoldAmount)}</span>
                 </div>
-                <div className="text-muted small mt-2"><i className="bi bi-info-circle me-1" />Final charges are calculated on return based on mileage, fuel and condition.</div>
+                <div className="text-muted small mt-2"><i className="bi bi-info-circle me-1" />This is a hold, not a charge — nothing is captured until you return the vehicle. Est. rental + extras due on return: {formatPrice((quote?.estimatedTotal || 0) - (quote?.deposit || 0))}.</div>
               </div>
 
               <div className="fleet-form-section">
@@ -314,14 +373,19 @@ export default function FleetRent() {
                   <input type="checkbox" className="form-check-input mt-1" checked={terms} onChange={(e) => setTerms(e.target.checked)} />
                   <span className="small text-muted">
                     I hold a valid driver’s licence, accept the rental terms, and understand that a
-                    refundable deposit of <strong>{formatPrice(quote?.deposit)}</strong> applies.
-                    Cancellations inside 48 hours of pick-up attract a fee of R250.
+                    refundable deposit of <strong>{formatPrice(quote?.deposit)}</strong> is held (not charged) on my card.
+                    Cancelling ≥3 days before pick-up costs the lower of what I&apos;ve paid or R550; inside 3 days,
+                    the lower of what I&apos;ve paid or 3 days&apos; rental value; on the day of pick-up or a no-show,
+                    the full amount is retained.
                   </span>
                 </label>
                 <div className="mt-3">
                   <label className="book-label" htmlFor="RentNotes">Notes for the team (optional)</label>
                   <textarea id="RentNotes" className="form-control book-textarea" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="e.g. Airport pick-up, child seat fitted…" />
                 </div>
+                {documentReviewRequired && (
+                  <div className="text-muted small mt-3"><i className="bi bi-file-earmark-lock me-1" />Your documents will be verified by Front Desk before pickup.</div>
+                )}
                 <button type="submit" className="book-submit mt-4 w-100" disabled={submitting}>
                   <i className="bi bi-car-front me-2" />{submitting ? 'Submitting…' : 'Submit rental request'}
                 </button>

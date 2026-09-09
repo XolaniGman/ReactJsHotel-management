@@ -1,0 +1,1102 @@
+/* ---------------------------------------------------------------
+   "The Palm" - guest-only shell and dashboard.
+   Distinct palette from the staff/admin Grand Hotel chrome; scoped
+   entirely under palm- prefixed class names so it never collides
+   with the lux- and dash- classes used by the rest of the app.
+----------------------------------------------------------------- */
+
+:root {
+  --palm-bg: #f3efe6;
+  --palm-sidebar: #14181f;
+  --palm-sidebar-2: #1b202b;
+  --palm-sidebar-text: #aab0bd;
+  --palm-sidebar-text-strong: #f4f1ea;
+  --palm-accent: #c1642f;
+  --palm-accent-dark: #a2521f;
+  --palm-green: #2f7d4f;
+  --palm-card: #ffffff;
+  --palm-border: #e7ddcd;
+  --palm-text: #1f2430;
+  --palm-muted: #6d7483;
+}
+
+.palm-shell {
+  display: flex;
+  min-height: 100vh;
+  background: var(--palm-bg);
+  font-family: 'Manrope', sans-serif;
+  color: var(--palm-text);
+}
+
+/* ---------------- Sidebar ---------------- */
+
+.palm-sidebar {
+  width: 248px;
+  flex-shrink: 0;
+  background: linear-gradient(180deg, var(--palm-sidebar), var(--palm-sidebar-2));
+  color: var(--palm-sidebar-text);
+  display: flex;
+  flex-direction: column;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+  z-index: 40;
+  transition: transform 0.2s ease;
+}
+
+.palm-sidebar-brand {
+  padding: 1.5rem 1.35rem 1.1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  text-decoration: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.palm-sidebar-brand-mark {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: var(--palm-accent);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Noto Serif', serif;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.palm-sidebar-brand-name {
+  font-family: 'Noto Serif', serif;
+  font-weight: 700;
+  color: var(--palm-sidebar-text-strong);
+  font-size: 0.98rem;
+  letter-spacing: 0.02em;
+  line-height: 1.15;
+}
+
+.palm-sidebar-brand-sub {
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--palm-sidebar-text);
+}
+
+.palm-sidebar-overview {
+  margin: 1rem 1.1rem 0.25rem;
+  padding: 0.55rem 0.75rem;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--palm-sidebar-text-strong);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.palm-nav-section {
+  margin-top: 1.4rem;
+  padding: 0 0.7rem;
+}
+
+.palm-nav-label {
+  font-size: 0.63rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #6b7180;
+  padding: 0 0.65rem 0.5rem;
+}
+
+.palm-nav-link {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: 9px;
+  color: var(--palm-sidebar-text);
+  text-decoration: none;
+  font-size: 0.83rem;
+  font-weight: 600;
+  background: transparent;
+  border: none;
+  width: 100%;
+  text-align: left;
+}
+
+.palm-nav-link i {
+  width: 18px;
+  text-align: center;
+  font-size: 0.95rem;
+}
+
+.palm-nav-link:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--palm-sidebar-text-strong);
+}
+
+.palm-nav-link.active {
+  background: var(--palm-accent);
+  color: #fff;
+}
+
+.palm-nav-badge {
+  margin-left: auto;
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--palm-sidebar-text-strong);
+  font-size: 0.68rem;
+  font-weight: 800;
+  border-radius: 999px;
+  padding: 0.05rem 0.45rem;
+}
+
+.palm-nav-link.active .palm-nav-badge {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.palm-nav-link.is-muted {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.palm-sidebar-overlay {
+  display: none;
+}
+
+/* ---------------- Main / topbar ---------------- */
+
+.palm-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.palm-topbar {
+  background: #fff;
+  border-bottom: 1px solid var(--palm-border);
+  padding: 0.7rem 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  position: sticky;
+  top: 0;
+  z-index: 30;
+}
+
+.palm-topbar-toggle {
+  display: none;
+  border: none;
+  background: transparent;
+  font-size: 1.2rem;
+  color: var(--palm-text);
+}
+
+.palm-search {
+  flex: 1;
+  max-width: 340px;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--palm-bg);
+  border: 1px solid var(--palm-border);
+  border-radius: 10px;
+  padding: 0.45rem 0.8rem;
+  color: var(--palm-muted);
+}
+
+.palm-search input {
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: 0.82rem;
+  width: 100%;
+  color: var(--palm-text);
+}
+
+.palm-topbar-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 1.1rem;
+}
+
+.palm-concierge {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+  color: var(--palm-muted);
+  white-space: nowrap;
+}
+
+.palm-bell {
+  position: relative;
+  font-size: 1.05rem;
+  color: var(--palm-text);
+}
+
+.palm-bell .dot {
+  position: absolute;
+  top: -2px;
+  right: -3px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--palm-accent);
+  border: 1.5px solid #fff;
+}
+
+.palm-user-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.palm-user-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--palm-accent), var(--palm-accent-dark));
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 0.85rem;
+  flex-shrink: 0;
+}
+
+.palm-user-name {
+  font-weight: 800;
+  font-size: 0.82rem;
+  line-height: 1.1;
+}
+
+.palm-user-sub {
+  font-size: 0.68rem;
+  color: var(--palm-muted);
+}
+
+/* ---------------- Verify banner ---------------- */
+
+.palm-verify-banner {
+  background: #fff6e6;
+  border-bottom: 1px solid #f0dfb0;
+  color: #8a640e;
+  padding: 0.55rem 1.5rem;
+  font-size: 0.82rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.palm-verify-banner button.link {
+  border: none;
+  background: none;
+  color: var(--palm-accent-dark);
+  font-weight: 700;
+  text-decoration: underline;
+  padding: 0;
+}
+
+.palm-verify-banner .close {
+  margin-left: auto;
+  border: none;
+  background: none;
+  color: #8a640e;
+  font-size: 1rem;
+}
+
+/* ---------------- Content ---------------- */
+
+.palm-content {
+  padding: 1.5rem;
+  max-width: 1320px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+/* ---------------- Hero ---------------- */
+
+.palm-hero {
+  position: relative;
+  border-radius: 18px;
+  overflow: hidden;
+  min-height: 260px;
+  display: flex;
+  align-items: flex-end;
+  padding: 1.75rem;
+  color: #fff;
+  background-size: cover;
+  background-position: center;
+  margin-bottom: 1.5rem;
+}
+
+.palm-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(10, 14, 22, 0.88) 0%, rgba(10, 14, 22, 0.45) 55%, rgba(10, 14, 22, 0.15) 100%);
+}
+
+.palm-hero-badges {
+  position: absolute;
+  top: 1.25rem;
+  right: 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  z-index: 1;
+}
+
+.palm-hero-pill {
+  background: rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(3px);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 999px;
+  padding: 0.28rem 0.75rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.palm-hero-pill.status {
+  background: var(--palm-green);
+  border-color: transparent;
+}
+
+.palm-hero-body {
+  position: relative;
+  z-index: 1;
+  max-width: 620px;
+}
+
+.palm-hero-kicker {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: rgba(255, 255, 255, 0.75);
+  margin-bottom: 0.4rem;
+}
+
+.palm-hero-title {
+  font-family: 'Noto Serif', serif;
+  font-size: 1.85rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+
+.palm-hero-copy {
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.85);
+  margin-bottom: 1.1rem;
+  max-width: 520px;
+}
+
+.palm-hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+/* ---------------- Buttons ---------------- */
+
+.palm-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 10px;
+  padding: 0.6rem 1.1rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  border: 1px solid transparent;
+  text-decoration: none;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.palm-btn:hover {
+  opacity: 0.92;
+}
+
+.palm-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.palm-btn-primary {
+  background: var(--palm-accent);
+  color: #fff;
+}
+
+.palm-btn-light {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
+.palm-btn-outline {
+  background: #fff;
+  color: var(--palm-text);
+  border-color: var(--palm-border);
+}
+
+.palm-btn-green {
+  background: var(--palm-green);
+  color: #fff;
+}
+
+.palm-hero-link {
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-decoration: none;
+  margin-left: auto;
+}
+
+/* ---------------- Layout grid ---------------- */
+
+.palm-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 1.25rem;
+  align-items: start;
+}
+
+.palm-card {
+  background: var(--palm-card);
+  border: 1px solid var(--palm-border);
+  border-radius: 16px;
+  margin-bottom: 1.25rem;
+  overflow: hidden;
+}
+
+.palm-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 1.1rem 1.25rem 0.5rem;
+}
+
+.palm-card-title {
+  font-family: 'Noto Serif', serif;
+  font-weight: 700;
+  font-size: 1.02rem;
+}
+
+.palm-card-sub {
+  font-size: 0.72rem;
+  color: var(--palm-muted);
+}
+
+.palm-card-body {
+  padding: 0.5rem 1.25rem 1.25rem;
+}
+
+.palm-status-chip {
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  border-radius: 999px;
+  padding: 0.22rem 0.6rem;
+}
+
+.palm-status-chip.success { background: #e6f4ec; color: var(--palm-green); }
+.palm-status-chip.info { background: #eaf0f7; color: #355f8c; }
+.palm-status-chip.warn, .palm-status-chip.warning { background: #fff6e6; color: #8a640e; }
+.palm-status-chip.muted, .palm-status-chip.dark { background: #eee; color: #6d7483; }
+.palm-status-chip.danger { background: #fdecea; color: #a33a2d; }
+
+/* ---------------- Stay card ---------------- */
+
+.palm-stay-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.9rem;
+  margin: 0.75rem 0 1.1rem;
+}
+
+.palm-stay-meta-item .label {
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--palm-muted);
+  margin-bottom: 0.2rem;
+}
+
+.palm-stay-meta-item .value {
+  font-weight: 800;
+  font-size: 0.88rem;
+}
+
+.palm-stay-actions {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.palm-card-link {
+  display: block;
+  text-align: right;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--palm-accent-dark);
+  text-decoration: none;
+  margin-top: 0.9rem;
+}
+
+/* ---------------- Dining rows ---------------- */
+
+.palm-dining-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.85rem;
+  padding: 0.9rem 0;
+  border-bottom: 1px solid #f1ece0;
+}
+
+.palm-dining-row:last-of-type {
+  border-bottom: none;
+}
+
+.palm-dining-thumb {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #6d4c1d, #9a7a38);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.palm-dining-title {
+  font-weight: 800;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.palm-dining-meta {
+  font-size: 0.76rem;
+  color: var(--palm-muted);
+  margin-top: 0.15rem;
+}
+
+.palm-dining-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
+/* ---------------- Quick actions ---------------- */
+
+.palm-quick-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.7rem;
+}
+
+.palm-quick-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  border: 1px solid var(--palm-border);
+  border-radius: 12px;
+  padding: 0.75rem;
+  text-decoration: none;
+  color: var(--palm-text);
+}
+
+.palm-quick-item:hover {
+  border-color: var(--palm-accent);
+}
+
+.palm-quick-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: var(--palm-bg);
+  color: var(--palm-accent-dark);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.palm-quick-label {
+  font-weight: 800;
+  font-size: 0.78rem;
+  line-height: 1.2;
+}
+
+.palm-quick-sub {
+  font-size: 0.68rem;
+  color: var(--palm-muted);
+  margin-top: 0.1rem;
+}
+
+/* ---------------- Today at the Palm ---------------- */
+
+.palm-today-item {
+  display: flex;
+  gap: 0.65rem;
+  padding: 0.6rem 0;
+  border-bottom: 1px solid #f1ece0;
+}
+
+.palm-today-item:last-of-type {
+  border-bottom: none;
+}
+
+.palm-today-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--palm-bg);
+  color: var(--palm-accent-dark);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 0.85rem;
+}
+
+.palm-today-title {
+  font-weight: 700;
+  font-size: 0.82rem;
+}
+
+.palm-today-meta {
+  font-size: 0.72rem;
+  color: var(--palm-muted);
+}
+
+.palm-weather-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--palm-muted);
+}
+
+/* ---------------- Folio ---------------- */
+
+.palm-folio-total {
+  font-family: 'Noto Serif', serif;
+  font-size: 1.7rem;
+  font-weight: 700;
+}
+
+.palm-folio-sub {
+  font-size: 0.72rem;
+  color: var(--palm-muted);
+  margin-bottom: 0.9rem;
+}
+
+.palm-folio-line {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.8rem;
+  padding: 0.4rem 0;
+  border-bottom: 1px dashed #f1ece0;
+}
+
+.palm-folio-line:last-of-type {
+  border-bottom: none;
+}
+
+.palm-folio-actions {
+  display: flex;
+  gap: 0.6rem;
+  margin-top: 1rem;
+}
+
+.palm-folio-actions .palm-btn {
+  flex: 1;
+  justify-content: center;
+}
+
+/* ---------------- Chat widget ---------------- */
+
+.palm-chat-widget {
+  position: fixed;
+  bottom: 1.25rem;
+  left: 1.25rem;
+  width: 280px;
+  background: var(--palm-sidebar);
+  color: #fff;
+  border-radius: 14px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+  z-index: 50;
+}
+
+.palm-chat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 0.9rem;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.palm-chat-title {
+  font-weight: 800;
+  font-size: 0.85rem;
+}
+
+.palm-chat-status {
+  font-size: 0.65rem;
+  color: #8bd6a6;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.palm-chat-status .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #4bce7b;
+}
+
+.palm-chat-body {
+  padding: 0.6rem 0.9rem 0.9rem;
+  font-size: 0.76rem;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.palm-chat-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.7rem;
+}
+
+.palm-chat-actions .palm-btn {
+  flex: 1;
+  justify-content: center;
+  padding: 0.45rem 0.6rem;
+  font-size: 0.76rem;
+}
+
+.palm-chat-close {
+  border: none;
+  background: none;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.85rem;
+}
+
+/* ---------------- Footer ---------------- */
+
+.palm-footer {
+  text-align: center;
+  font-size: 0.72rem;
+  color: var(--palm-muted);
+  padding: 1.5rem 1.5rem 2rem;
+}
+
+.palm-footer a {
+  color: var(--palm-muted);
+  text-decoration: none;
+  margin: 0 0.5rem;
+}
+
+.palm-footer .sep {
+  margin: 0 0.5rem;
+}
+
+/* ---------------------------------------------------------------
+   Shared primitives for guest sub-pages (booking, services,
+   maintenance, lost & found, restaurant, fleet). Scope every guest
+   page's root under .palm-page so inputs/labels harmonize without
+   touching each individual field.
+----------------------------------------------------------------- */
+
+.palm-page {
+  font-family: 'Manrope', sans-serif;
+  color: var(--palm-text);
+}
+
+.palm-page .form-control,
+.palm-page .form-select {
+  border-color: var(--palm-border);
+  border-radius: 10px;
+  font-size: 0.85rem;
+}
+
+.palm-page .form-control:focus,
+.palm-page .form-select:focus {
+  border-color: var(--palm-accent);
+  box-shadow: 0 0 0 0.2rem rgba(193, 100, 47, 0.15);
+}
+
+.palm-page label:not(.palm-quick-item):not(.palm-nav-link) {
+  font-weight: 700;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--palm-muted);
+  margin-bottom: 0.3rem;
+  display: inline-block;
+}
+
+.palm-page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.palm-page-kicker {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--palm-accent-dark);
+  font-weight: 800;
+  margin-bottom: 0.3rem;
+}
+
+.palm-page-title {
+  font-family: 'Noto Serif', serif;
+  font-weight: 700;
+  font-size: 1.6rem;
+  margin-bottom: 0.4rem;
+}
+
+.palm-page-copy {
+  font-size: 0.85rem;
+  color: var(--palm-muted);
+  max-width: 640px;
+  margin-bottom: 0;
+}
+
+.palm-alert {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  border-radius: 12px;
+  padding: 0.7rem 1rem;
+  font-size: 0.84rem;
+  margin-bottom: 1rem;
+  border: 1px solid transparent;
+}
+
+.palm-alert-danger { background: #fdecea; color: #a33a2d; border-color: rgba(163, 58, 45, 0.15); }
+.palm-alert-success { background: #e6f4ec; color: var(--palm-green); border-color: rgba(47, 125, 79, 0.15); }
+.palm-alert-info { background: #eaf0f7; color: #355f8c; border-color: rgba(53, 95, 140, 0.15); }
+
+.palm-tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.palm-tab {
+  border: 1px solid var(--palm-border);
+  background: #fff;
+  color: var(--palm-text);
+  border-radius: 999px;
+  padding: 0.45rem 1rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.palm-tab.active {
+  background: var(--palm-sidebar);
+  border-color: var(--palm-sidebar);
+  color: #fff;
+}
+
+.palm-step-track {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.25rem;
+}
+
+.palm-step {
+  border-radius: 999px;
+  padding: 0.35rem 0.85rem;
+  font-size: 0.66rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: #fff;
+  border: 1px solid var(--palm-border);
+  color: var(--palm-muted);
+}
+
+.palm-step.active {
+  background: var(--palm-sidebar);
+  border-color: var(--palm-sidebar);
+  color: #fff;
+}
+
+.palm-priority-grid {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.palm-priority {
+  border: 1px solid var(--palm-border);
+  border-radius: 10px;
+  padding: 0.5rem 0.9rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: #fff;
+}
+
+.palm-priority.selected {
+  border-color: var(--palm-accent);
+  background: #fdf1e9;
+  color: var(--palm-accent-dark);
+}
+
+.palm-priority input {
+  accent-color: var(--palm-accent);
+}
+
+.palm-upload {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  border: 1.5px dashed var(--palm-border);
+  border-radius: 12px;
+  padding: 1.25rem;
+  color: var(--palm-muted);
+  font-size: 0.8rem;
+  cursor: pointer;
+  text-align: center;
+}
+
+.palm-upload img {
+  max-width: 100%;
+  max-height: 160px;
+  border-radius: 10px;
+}
+
+.palm-list-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid #f1ece0;
+}
+
+.palm-list-row:last-child {
+  border-bottom: none;
+}
+
+.palm-list-title {
+  font-weight: 800;
+  font-size: 0.85rem;
+}
+
+.palm-list-meta {
+  font-size: 0.72rem;
+  color: var(--palm-muted);
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin-top: 0.15rem;
+}
+
+.palm-empty {
+  text-align: center;
+  color: var(--palm-muted);
+  padding: 2rem 1rem;
+  font-size: 0.85rem;
+}
+
+.palm-choice-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border: 1px solid var(--palm-border);
+  border-radius: 12px;
+  padding: 0.75rem 0.9rem;
+  background: #fff;
+}
+
+.palm-choice-row.is-selected {
+  border-color: var(--palm-accent);
+  box-shadow: 0 0 0 1px var(--palm-accent);
+}
+
+/* ---------------- Responsive ---------------- */
+
+@media (max-width: 1080px) {
+  .palm-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 860px) {
+  .palm-sidebar {
+    position: fixed;
+    left: 0;
+    transform: translateX(-100%);
+    box-shadow: 0 0 40px rgba(0, 0, 0, 0.35);
+  }
+
+  .palm-shell.sidebar-open .palm-sidebar {
+    transform: translateX(0);
+  }
+
+  .palm-sidebar-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(10, 14, 22, 0.5);
+    z-index: 39;
+  }
+
+  .palm-shell.sidebar-open .palm-sidebar-overlay {
+    display: block;
+  }
+
+  .palm-topbar-toggle {
+    display: inline-flex;
+  }
+
+  .palm-search {
+    display: none;
+  }
+
+  .palm-stay-meta-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .palm-quick-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .palm-chat-widget {
+    left: 0.75rem;
+    right: 0.75rem;
+    width: auto;
+  }
+}

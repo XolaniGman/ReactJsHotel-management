@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Fragment } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useFleetLive } from '../hooks/useFleetLive';
@@ -7,10 +7,13 @@ import {
   assignDriverToService,
   updateCarServiceStatus,
   updateServiceLivePosition,
+  updateBookingLivePosition,
+  finalizePostRentalInspection,
   bookingDisplay,
 } from '../services/fleetService';
 import { rankDriversForTrip } from '../lib/fleetAlgo';
 import FleetMap from '../components/FleetMap';
+import HandoverRegister from '../components/HandoverRegister';
 import { formatPrice, formatGuestDate } from '../lib/utils';
 import './maintenance.css';
 import './housekeeping.css';
@@ -19,13 +22,16 @@ import './fleet.css';
 
 export default function FleetDashboard() {
   const { user } = useAuth();
-  const { stats: data, vehicles, bookings, services, drivers, loading } = useFleetLive();
+  const { stats: data, vehicles, bookings, services, drivers, handovers, loading } = useFleetLive();
   const [confirmUnit, setConfirmUnit] = useState({});
+  const [overrideNote, setOverrideNote] = useState({});
   const [dispatchMap, setDispatchMap] = useState({});
   const [notice, setNotice] = useState('');
   const [activeSection, setActiveSection] = useState('rentals');
   const [liveMapId, setLiveMapId] = useState('');
+  const [liveKind, setLiveKind] = useState('');
   const [liveWatch, setLiveWatch] = useState(null);
+  const [rentalSearch, setRentalSearch] = useState('');
   const isManager = ['fleetmanager', 'admin', 'system'].includes(user?.role);
 
   useEffect(() => () => {
@@ -34,8 +40,11 @@ export default function FleetDashboard() {
   }, []);
 
   useEffect(() => {
-    if (liveMapId && !services.some((s) => s.id === liveMapId)) setLiveMapId('');
-  }, [services, liveMapId]);
+    if (!liveMapId) return;
+    const inServices = services.some((s) => s.id === liveMapId);
+    const inBookings = bookings.some((b) => b.id === liveMapId);
+    if (!inServices && !inBookings) setLiveMapId('');
+  }, [services, bookings, liveMapId]);
 
   if (loading) {
     return (
@@ -46,15 +55,32 @@ export default function FleetDashboard() {
   }
 
   const pendingBookings = (bookings || []).filter((b) => b.status === 'PendingConfirmation');
-  const confirmedBookings = (bookings || []).filter((b) => ['Confirmed', 'CheckedOut'].includes(b.status));
+  const rentalBookings = (bookings || []).filter((b) => ['Confirmed', 'CheckedOut', 'PendingInspection', 'CheckedIn'].includes(b.status));
   const pendingServices = (services || []).filter((s) => s.status === 'PendingAssignment');
   const activeTrips = (services || []).filter((s) => ['Assigned', 'EnRoute', 'Arrived'].includes(s.status));
   const bookableVehicles = (vehicles || []).filter((v) => v.status === 'Available');
+  const visibleRentals = rentalBookings.filter((b) => {
+    const q = rentalSearch.trim().toLowerCase();
+    if (!q) return true;
+    return [b.guestName, b.ref, b.unitNumber, b.plateNumber, b.licenseNumber, b.vehicleName]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase()
+      .includes(q);
+  });
+
+  const finalizeInspection = async (b) => {
+    setNotice('');
+    const res = await finalizePostRentalInspection(b.id, { qualifiedBy: user.name });
+    if (res?.error) return setNotice(res.error);
+    setNotice(`${b.ref}: post-rental inspection passed — vehicle ${res.vehicleStatus}. Return finalized.`);
+  };
 
   const confirm = async (id) => {
     const unit = confirmUnit[id];
     if (!unit) return setNotice('Select a vehicle unit to assign before confirming.');
-    await confirmCarBooking(id, { unitNumber: unit, assignedBy: user.name });
+    const res = await confirmCarBooking(id, { unitNumber: unit, assignedBy: user.name, overrideNote: overrideNote[id] });
+    if (res?.error) return setNotice(res.error);
     setNotice('Booking confirmed — vehicle locked for the rental window.');
   };
 
@@ -94,17 +120,23 @@ export default function FleetDashboard() {
     setNotice(`Auto-matched ${ranked[0].name} (match ${ranked[0].matchScore}/100) — ${ranked[0].matchReasons[0] || ''}`);
   };
 
-  const goLive = (trip) => {
+  const goLive = (target, kind = 'service') => {
     if (liveWatch) navigator.geolocation.clearWatch(liveWatch);
+    const write = kind === 'booking'
+      ? (lat, lng) => updateBookingLivePosition(target.id, { lat, lng, on: true })
+      : (lat, lng) => updateServiceLivePosition(target.id, { lat, lng });
     try {
       const watchId = navigator.geolocation.watchPosition(
-        (pos) => updateServiceLivePosition(trip.id, { lat: pos.coords.latitude, lng: pos.coords.longitude }),
+        (pos) => write(pos.coords.latitude, pos.coords.longitude),
         (err) => setNotice(`Geolocation error: ${err.message}`),
         { enableHighAccuracy: true },
       );
       setLiveWatch(watchId);
-      setLiveMapId(trip.id);
-      setNotice(`Live tracking started for ${trip.guestName} — position streams to the guest's trip view.`);
+      setLiveMapId(target.id);
+      setLiveKind(kind);
+      setNotice(kind === 'booking'
+        ? `Live tracking started for ${target.vehicleName || 'the rented vehicle'} — position streams to the guest's My Trips view.`
+        : `Live tracking started for ${target.guestName} — position streams to the guest's trip view.`);
     } catch {
       setNotice('Live tracking unavailable in this browser.');
     }
@@ -112,7 +144,9 @@ export default function FleetDashboard() {
 
   const stopLive = () => {
     if (liveWatch) navigator.geolocation.clearWatch(liveWatch);
+    if (liveKind === 'booking' && liveMapId) updateBookingLivePosition(liveMapId, { on: false }).catch(() => {});
     setLiveWatch(null);
+    setLiveKind('');
     setNotice('Live position stream stopped.');
   };
 
@@ -175,6 +209,20 @@ export default function FleetDashboard() {
           ))}
         </div>
 
+        {(data.documentsNeedingReview > 0 || data.highRiskOverridesPending > 0 || data.chargesAwaitingGuestResponse > 0) && (
+          <div className="d-flex gap-2 flex-wrap mb-4">
+            {data.documentsNeedingReview > 0 && (
+              <span className="fleet-flag fleet-flag-warn"><i className="bi bi-file-earmark-lock me-1" />{data.documentsNeedingReview} document(s) needing review</span>
+            )}
+            {data.highRiskOverridesPending > 0 && (
+              <span className="fleet-flag fleet-flag-danger"><i className="bi bi-shield-exclamation me-1" />{data.highRiskOverridesPending} high-risk override(s) pending</span>
+            )}
+            {data.chargesAwaitingGuestResponse > 0 && (
+              <span className="fleet-flag fleet-flag-warn"><i className="bi bi-hourglass-split me-1" />{data.chargesAwaitingGuestResponse} charge(s) awaiting guest response</span>
+            )}
+          </div>
+        )}
+
         <div className="panel-card mb-4">
           <div className="panel-header">
             <h2><i className="bi bi-grid me-2" />Fleet status</h2>
@@ -197,10 +245,13 @@ export default function FleetDashboard() {
 
         <div className="d-flex gap-2 mb-3">
           <button type="button" className={`lux-btn ${activeSection === 'rentals' ? 'lux-btn-solid' : 'lux-btn-outline'}`} onClick={() => setActiveSection('rentals')}>
-            <i className="bi bi-car-front me-2" />Rental confirmations ({pendingBookings.length + confirmedBookings.length})
+            <i className="bi bi-car-front me-2" />Rental confirmations ({pendingBookings.length + rentalBookings.length})
           </button>
           <button type="button" className={`lux-btn ${activeSection === 'dispatch' ? 'lux-btn-solid' : 'lux-btn-outline'}`} onClick={() => setActiveSection('dispatch')}>
             <i className="bi bi-taxi-front me-2" />Shuttle dispatch ({pendingServices.length + activeTrips.length})
+          </button>
+          <button type="button" className={`lux-btn ${activeSection === 'handovers' ? 'lux-btn-solid' : 'lux-btn-outline'}`} onClick={() => setActiveSection('handovers')}>
+            <i className="bi bi-arrow-left-right me-2" />Handovers &amp; returns ({(handovers || []).length})
           </button>
         </div>
 
@@ -225,6 +276,8 @@ export default function FleetDashboard() {
                           <td>
                             <div className="task-name">{b.guestName}</div>
                             <div className="task-sub">{b.licenseNumber || 'No licence on file'}</div>
+                            {b.documentReviewRequired && <div className="fleet-flag fleet-flag-warn"><i className="bi bi-file-earmark-lock me-1" />Documents need review</div>}
+                            {b.riskFlag && <div className="fleet-flag fleet-flag-danger"><i className="bi bi-shield-exclamation me-1" />High-risk — override required</div>}
                           </td>
                           <td>
                             <div className="task-name">{b.vehicleName}</div>
@@ -234,14 +287,25 @@ export default function FleetDashboard() {
                           <td>{formatPrice(b.estimatedTotal)}</td>
                           <td><span className={`fleet-badge fleet-badge-${b.status}`}>{bookingDisplay(b.status)}</span></td>
                           <td>
-                            <div className="d-flex gap-1 align-items-center">
-                              <select className="form-select form-select-sm" style={{ width: 170 }} value={confirmUnit[b.id] || ''} onChange={(e) => setConfirmUnit({ ...confirmUnit, [b.id]: e.target.value })}>
-                                <option value="">Assign unit…</option>
-                                {bookableVehicles.map((v) => (
-                                  <option key={v.id} value={v.unitNumber || v.plateNumber || v.name}>{v.name} · {v.unitNumber || v.plateNumber}</option>
-                                ))}
-                              </select>
-                              <button type="button" className="btn-request-start btn-request-done" onClick={() => confirm(b.id)}>Confirm</button>
+                            <div className="d-flex flex-column gap-1">
+                              <div className="d-flex gap-1 align-items-center">
+                                <select className="form-select form-select-sm" style={{ width: 170 }} value={confirmUnit[b.id] || ''} onChange={(e) => setConfirmUnit({ ...confirmUnit, [b.id]: e.target.value })}>
+                                  <option value="">Assign unit…</option>
+                                  {bookableVehicles.map((v) => (
+                                    <option key={v.id} value={v.unitNumber || v.plateNumber || v.name}>{v.name} · {v.unitNumber || v.plateNumber}</option>
+                                  ))}
+                                </select>
+                                <button type="button" className="btn-request-start btn-request-done" onClick={() => confirm(b.id)}>Confirm</button>
+                              </div>
+                              {b.riskFlag && (
+                                <input
+                                  type="text"
+                                  className="form-control form-control-sm"
+                                  placeholder="Override reason (required, logged)"
+                                  value={overrideNote[b.id] || ''}
+                                  onChange={(e) => setOverrideNote({ ...overrideNote, [b.id]: e.target.value })}
+                                />
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -255,7 +319,17 @@ export default function FleetDashboard() {
             <div className="panel-card">
               <div className="panel-header">
                 <h2>Active rentals — check-out / check-in</h2>
-                <span className="panel-actions">{confirmedBookings.length} active</span>
+                <span className="panel-actions">
+                  <input
+                    type="search"
+                    className="form-control form-control-sm"
+                    style={{ width: 230 }}
+                    placeholder="Find by unit, plate, guest or ref…"
+                    value={rentalSearch}
+                    onChange={(e) => setRentalSearch(e.target.value)}
+                  />
+                  {visibleRentals.length} in handover flow
+                </span>
               </div>
               <div className="table-responsive">
                 <table className="task-table">
@@ -263,11 +337,12 @@ export default function FleetDashboard() {
                     <tr><th>Guest</th><th>Vehicle / unit</th><th>Window</th><th>Status</th><th>Action</th></tr>
                   </thead>
                   <tbody>
-                    {confirmedBookings.length === 0 ? (
-                      <tr><td colSpan="5" className="text-center py-5 text-muted">No vehicles currently on rent.</td></tr>
+                    {visibleRentals.length === 0 ? (
+                      <tr><td colSpan="5" className="text-center py-5 text-muted">{rentalSearch.trim() ? `No rentals match "${rentalSearch}".` : 'No vehicles currently on rent.'}</td></tr>
                     ) : (
-                      confirmedBookings.map((b) => (
-                        <tr key={b.id}>
+                      visibleRentals.map((b) => (
+                        <Fragment key={b.id}>
+                        <tr>
                           <td>
                             <div className="task-name">{b.guestName}</div>
                             <div className="task-sub">{b.ref}</div>
@@ -279,12 +354,78 @@ export default function FleetDashboard() {
                           <td className="task-sub">{formatGuestDate(b.pickupDate)} {b.pickupTime}<br />→ {formatGuestDate(b.dropoffDate)} {b.dropoffTime}</td>
                           <td><span className={`fleet-badge fleet-badge-${b.status}`}>{bookingDisplay(b.status)}</span></td>
                           <td>
-                            <Link to={`/Fleet/Handover/${b.id}?type=CheckOut`} className="btn-log" style={{ padding: '0.45rem 0.85rem', fontSize: '0.78rem' }}>Check out</Link>
-                            {b.status === 'CheckedOut' && (
-                              <Link to={`/Fleet/Handover/${b.id}?type=CheckIn`} className="btn-log mt-1" style={{ padding: '0.45rem 0.85rem', fontSize: '0.78rem', background: '#2f7d4f', display: 'inline-flex' }}>Check in</Link>
+                            <div className="d-flex flex-column gap-1 align-items-start">
+                            {b.status === 'Confirmed' && (
+                              <Link to={`/Fleet/Handover/${b.id}?type=CheckOut`} className="btn-log" style={{ padding: '0.45rem 0.85rem', fontSize: '0.78rem' }}>
+                                <i className="bi bi-box-arrow-up-right me-1" />Check out
+                              </Link>
                             )}
+                            {b.status === 'CheckedOut' && (
+                              <>
+                                {liveMapId === b.id && liveKind === 'booking' ? (
+                                  <button type="button" className="btn-log" style={{ padding: '0.45rem 0.85rem', fontSize: '0.78rem', background: '#8a3b2f' }} onClick={stopLive}>
+                                    <i className="bi bi-stop-circle me-1" />Stop live
+                                  </button>
+                                ) : (
+                                  <button type="button" className="btn-log" style={{ padding: '0.45rem 0.85rem', fontSize: '0.78rem', background: '#2f7d4f' }} onClick={() => goLive(b, 'booking')}>
+                                    <i className="bi bi-broadcast me-1" />Go live
+                                  </button>
+                                )}
+                                {b.liveTracking || b.livePosition ? (
+                                  <span className={`fleet-badge ${b.livePosition ? 'fleet-badge-SignedOff' : 'fleet-badge-Open'}`}>
+                                    <i className={`bi ${b.livePosition ? 'bi-geo-alt-fill' : 'bi-hourglass-split'} me-1`} />{b.livePosition ? 'Live on air' : 'Feed starting'}
+                                  </span>
+                                ) : null}
+                                <Link to={`/Fleet/Handover/${b.id}?type=CheckIn`} className="btn-log" style={{ padding: '0.45rem 0.85rem', fontSize: '0.78rem', background: '#2f7d4f', display: 'inline-flex' }}>
+                                  <i className="bi bi-box-arrow-in-down me-1" />Check in
+                                </Link>
+                              </>
+                            )}
+                            {b.status === 'PendingInspection' && (
+                              <div className="d-flex flex-column gap-1 align-items-start">
+                                <div className="d-flex gap-1 flex-wrap align-items-center">
+                                  <span className="fleet-badge fleet-badge-PendingInspection">Returned — pending inspection</span>
+                                  {b.returnTiming && (
+                                    <span className={`fleet-badge ${b.returnTiming.status === 'Late' ? 'fleet-badge-Open' : b.returnTiming.status === 'OnTime' ? 'fleet-badge-PendingInspection' : 'fleet-badge-SignedOff'}`}>
+                                      {b.returnTiming.status === 'Late' ? `Late · ${b.returnTiming.lateHours}h after grace` : b.returnTiming.status === 'OnTime' ? 'On time' : 'Early return'}
+                                    </span>
+                                  )}
+                                </div>
+                                <button type="button" className="btn-log" style={{ padding: '0.45rem 0.85rem', fontSize: '0.78rem', background: '#355f8c' }} onClick={() => finalizeInspection(b)}>
+                                  <i className="bi bi-clipboard-check me-1" />Complete post-rental inspection
+                                </button>
+                                <button type="button" className="btn btn-sm btn-outline-danger" onClick={() => { setNotice(`Report an incident for ${b.ref} after the return.`); }}>
+                                  <i className="bi bi-bug me-1" />Report incident
+                                </button>
+                              </div>
+                            )}
+                            {b.status === 'CheckedIn' && (
+                              <div className="d-flex flex-column gap-1 align-items-start">
+                                <span className="fleet-badge fleet-badge-CheckedIn">Return completed</span>
+                                <Link to={`/Fleet/Incident/Report?type=booking&id=${b.id}`} className="btn btn-sm btn-outline-danger">
+                                  <i className="bi bi-bug me-1" />Report incident
+                                </Link>
+                              </div>
+                            )}
+                            </div>
                           </td>
                         </tr>
+                        {liveMapId === b.id && liveKind === 'booking' && b.livePosition && (
+                          <tr>
+                            <td colSpan="5" style={{ padding: '0.25rem 0.75rem 0.75rem' }}>
+                              <FleetMap
+                                height={240}
+                                markers={[
+                                  { lat: b.livePosition.lat, lng: b.livePosition.lng, color: '#355f8c', label: `${b.vehicleName} · live`, follow: true },
+                                ]}
+                              />
+                              <div className="text-muted small mt-1">
+                                <span className="live-pulse" />Streaming {b.vehicleName} for {b.guestName} — position refreshes automatically on the guest's My Trips view.
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                        </Fragment>
                       ))
                     )}
                   </tbody>
@@ -462,6 +603,17 @@ export default function FleetDashboard() {
                   </span>
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+      {activeSection === 'handovers' && (
+          <div className="panel-card mt-4">
+            <div className="panel-header">
+              <h2><i className="bi bi-arrow-left-right me-2" />Check-in &amp; check-out records</h2>
+              <Link to="/Fleet/Handovers" className="panel-link">Open full register →</Link>
+            </div>
+            <div className="p-3">
+              <HandoverRegister />
             </div>
           </div>
         )}

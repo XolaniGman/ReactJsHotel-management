@@ -3,48 +3,53 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { listUserReservations } from '../services/reservationService';
 import { listBillsForGuest } from '../services/billService';
-import { listGuestCleaningRequests } from '../services/housekeepingService';
-import { listMyLostReports } from '../services/lostFoundService';
 import { listTableReservations, updateTableReservationStatus } from '../services/restaurantService';
-import { formatPrice, formatDateRange, formatDateTime, statusTone, todayISO } from '../lib/utils';
-import './guest.css';
+import { formatPrice, formatGuestDate, todayISO, nightsBetween } from '../lib/utils';
+import './palm.css';
 
-const STATUS_LABEL = {
+const STAY_STATUS = {
   Pending: 'warn', Approved: 'info', CheckedIn: 'success', CheckedOut: 'muted', Cancelled: 'muted', Declined: 'danger',
 };
 
-const RESTAURANT_STATUS_LABEL = {
+const DINING_STATUS = {
   Reserved: 'info', CheckedIn: 'success', Completed: 'success', Cancelled: 'muted', NoShow: 'danger',
 };
 
+const TODAY_AT_THE_PALM = [
+  { icon: 'bi-moon-stars', title: 'Sunset Luau on Ocean Terrace', meta: 'Complimentary sparkling wine for suite guests · from 6:00 PM' },
+  { icon: 'bi-sun', title: 'Morning Reef Snorkel & Yoga', meta: '07:00 AM · West Beach Pavilion' },
+];
+
+const QUICK_ACTIONS = [
+  { to: '/Amenities/Request', icon: 'bi-flower2', label: 'Book Spa', sub: 'Serenity Spa & Massage' },
+  { to: '/Fleet/Vehicles', icon: 'bi-car-front', label: 'Rent a Car', sub: 'Browse our fleet' },
+  { to: '/Fleet/Service', icon: 'bi-airplane', label: 'Airport Shuttle', sub: 'Private transfer' },
+  { to: '/Housekeeping/RequestRoomCleaning', icon: 'bi-box-seam', label: 'Room Supplies', sub: 'Request essentials' },
+  { to: '/Maintenance/Request', icon: 'bi-tools', label: 'Maintenance', sub: 'Report an issue' },
+  { to: '/LostItems/Services', icon: 'bi-search', label: 'Lost & Found', sub: 'Item recovery' },
+];
+
 export default function GuestDashboard() {
-  const { user, sendVerificationEmail } = useAuth();
+  const { user } = useAuth();
   const [reservations, setReservations] = useState([]);
   const [bills, setBills] = useState([]);
-  const [cleaning, setCleaning] = useState([]);
-  const [lost, setLost] = useState([]);
-  const [restaurantReservations, setRestaurantReservations] = useState([]);
+  const [dining, setDining] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [sent, setSent] = useState(false);
   const [notice, setNotice] = useState('');
   const [checkingIn, setCheckingIn] = useState('');
 
   const load = async () => {
-    const [r, b, c, l, tr] = await Promise.all([
+    const [r, b, tr] = await Promise.all([
       listUserReservations(user.uid),
       listBillsForGuest(user.uid),
-      listGuestCleaningRequests(user.uid),
-      listMyLostReports(user.uid),
       listTableReservations(),
     ]);
     setReservations(r);
     setBills(b);
-    setCleaning(c);
-    setLost(l);
-    setRestaurantReservations(
+    setDining(
       tr
         .filter((x) => x.guestUid === user.uid)
-        .sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`)),
+        .sort((a, c) => `${a.date} ${a.time}`.localeCompare(`${c.date} ${c.time}`)),
     );
     setLoading(false);
   };
@@ -53,12 +58,11 @@ export default function GuestDashboard() {
     if (user?.uid) load();
   }, [user?.uid]);
 
-  const resend = async () => {
-    const result = await sendVerificationEmail();
-    if (result?.ok) setSent(true);
-  };
-
-  const totalBalance = bills.reduce((s, b) => s + (b.balanceDue || 0), 0);
+  const activeRes = reservations.find((r) => r.status === 'CheckedIn') || reservations.find((r) => r.status === 'Approved');
+  const latestBill = activeRes
+    ? bills.find((b) => b.reservationId === activeRes.id) || bills[0]
+    : bills[0];
+  const folioLines = (latestBill?.lineItems || []).filter((l) => l.type !== 'VAT' && l.type !== 'Levy').slice(0, 4);
 
   const canCheckIn = (r) => {
     if (r.status !== 'Reserved' || r.date !== todayISO()) return false;
@@ -81,207 +85,203 @@ export default function GuestDashboard() {
     setCheckingIn('');
   };
 
-  return (
-    <div className="dash-shell">
-      {user && !user.emailVerified && user.role === 'guest' && (
-        <div className="dash-notice">
-          <strong>Verify your email</strong> to unlock the full experience.
-          {!sent ? (
-            <button type="button" className="btn btn-sm btn-link p-0 ms-2" onClick={resend}>Resend verification email</button>
-          ) : (
-            <span className="ms-2 text-success"><i className="bi bi-check-circle me-1" />Verification email sent.</span>
-          )}
-        </div>
-      )}
+  if (loading) {
+    return <div className="text-center text-muted py-5"><i className="bi bi-arrow-repeat me-2" />Loading your stay…</div>;
+  }
 
-      <div className="dash-hero">
-        <div>
-          <div className="dash-hero-kicker">Guest Dashboard</div>
-          <h1 className="dash-hero-title">Welcome, {user?.name}</h1>
-          <p className="dash-hero-copy">
-            Manage your stays, request services, and keep track of your bills — all in one place.
+  return (
+    <div>
+      <div
+        className="palm-hero"
+        style={{ backgroundImage: "url('https://images.unsplash.com/photo-1571003123894-1f0594d2b5d9?auto=format&fit=crop&w=1600&q=80')" }}
+      >
+        <div className="palm-hero-badges">
+          {activeRes?.status === 'CheckedIn' && <span className="palm-hero-pill status">Currently In-House</span>}
+          {activeRes && <span className="palm-hero-pill">{formatGuestDate(activeRes.checkInDate)} – {formatGuestDate(activeRes.checkOutDate)}</span>}
+        </div>
+        <div className="palm-hero-body">
+          <div className="palm-hero-kicker">Guest Portal</div>
+          <h1 className="palm-hero-title">Welcome back, {user?.name}</h1>
+          <p className="palm-hero-copy">
+            {activeRes
+              ? `Your private sanctuary at Room ${activeRes.roomNumber} (${activeRes.roomType}). Everything you need during your stay is thoughtfully arranged below.`
+              : 'Everything you need for your next stay is thoughtfully arranged below.'}
           </p>
-          <div className="d-flex gap-2 flex-wrap">
-            <Link to="/Reservations/Create" className="dash-check-btn">
-              <i className="bi bi-calendar-plus" /> Book a stay
+          <div className="palm-hero-actions">
+            <button type="button" className="palm-btn palm-btn-light" disabled title="Digital key coming soon">
+              <i className="bi bi-key" />Open Digital Key
+            </button>
+            <Link to="/Restaurant" className="palm-btn palm-btn-primary">
+              <i className="bi bi-egg-fried" />Order In-Room Dining
             </Link>
-            <Link to="/Housekeeping/RequestRoomCleaning" className="dash-check-btn" style={{ background: '#9a7a38' }}>
-              <i className="bi bi-stars" /> Request cleaning
+            <Link to="/Fleet/MyTrips" className="palm-btn palm-btn-light">
+              <i className="bi bi-car-front" />View Rental Details
             </Link>
+            <Link to="/Amenities/Request" className="palm-hero-link">Request Amenities →</Link>
           </div>
         </div>
       </div>
 
-      <div className="dash-grid">
+      {notice && <div className="palm-card"><div className="palm-card-body pt-3"><i className="bi bi-check-circle me-2 text-success" />{notice}</div></div>}
+
+      <div className="palm-grid">
         <div>
-          <div className="dash-panel">
-            <div className="dash-panel-header">
-              <h2>My reservations</h2>
-              <Link className="dash-panel-link" to="/Reservations/Create">+ New booking</Link>
-            </div>
-            {loading ? (
-              <div className="dash-empty">Loading…</div>
-            ) : reservations.length === 0 ? (
-              <div className="dash-empty">
-                <i className="bi bi-calendar-x" /> No reservations yet.
+          {activeRes ? (
+            <div className="palm-card">
+              <div className="palm-card-header">
+                <span className="palm-card-title">Room {activeRes.roomNumber} · {activeRes.roomType}</span>
+                <span className={`palm-status-chip ${STAY_STATUS[activeRes.status] || 'info'}`}>{activeRes.status}</span>
               </div>
-            ) : (
-              reservations.slice(0, 5).map((r) => (
-                <div className="dash-row" key={r.id}>
-                  <div className="dash-row-thumb" style={{ background: 'linear-gradient(135deg,#775a19,#9a7a38)', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '1.3rem' }}>
-                    <i className="bi bi-door-open" />
+              <div className="palm-card-body">
+                <div className="palm-card-sub">Reservation {activeRes.bookingRef}</div>
+                <div className="palm-stay-meta-grid">
+                  <div className="palm-stay-meta-item">
+                    <div className="label">Check-in</div>
+                    <div className="value">{formatGuestDate(activeRes.checkInDate)}</div>
                   </div>
-                  <div>
-                    <div className="dash-row-title">Room {r.roomNumber} · {r.roomType}</div>
-                    <div className="dash-row-meta">
-                      <span>{formatDateRange(r.checkInDate, r.checkOutDate)}</span>
-                      <span>{r.bookingRef}</span>
-                    </div>
+                  <div className="palm-stay-meta-item">
+                    <div className="label">Check-out</div>
+                    <div className="value">{formatGuestDate(activeRes.checkOutDate)}</div>
                   </div>
-                  <span className={`dash-status-pill ${STATUS_LABEL[r.status] || 'info'}`}>{r.status}</span>
-                  <Link className="dash-icon-btn" to={`/Reservations/Details/${r.id}`} title="Open"><i className="bi bi-arrow-right-circle" /></Link>
+                  <div className="palm-stay-meta-item">
+                    <div className="label">Nights</div>
+                    <div className="value">{nightsBetween(activeRes.checkInDate, activeRes.checkOutDate)}</div>
+                  </div>
+                  <div className="palm-stay-meta-item">
+                    <div className="label">Current Folio</div>
+                    <div className="value">{latestBill ? formatPrice(latestBill.balanceDue) : '—'}</div>
+                  </div>
                 </div>
-              ))
-            )}
-          </div>
-
-          <div className="dash-panel dash-panel--spaced">
-            <div className="dash-panel-header">
-              <h2><i className="bi bi-egg-fried me-2" />Restaurant reservations</h2>
-              <Link className="dash-panel-link" to="/Restaurant/Reserve">+ Reserve a table</Link>
-            </div>
-
-            {notice && (
-              <div className="dash-notice" style={{ margin: '0.5rem 1rem' }}>
-                <i className="bi bi-check-circle me-2" />{notice}
+                <div className="palm-stay-actions">
+                  <Link to="/Housekeeping/RequestRoomCleaning" className="palm-btn palm-btn-outline">
+                    <i className="bi bi-stars" />Request Room Cleaning
+                  </Link>
+                  <Link to="/Amenities/Request" className="palm-btn palm-btn-outline">
+                    <i className="bi bi-star" />Suite Amenities
+                  </Link>
+                </div>
+                <Link to={`/Reservations/Details/${activeRes.id}`} className="palm-card-link">View Full Stay Details →</Link>
               </div>
-            )}
+            </div>
+          ) : (
+            <div className="palm-card">
+              <div className="palm-card-body pt-4 text-center">
+                <p className="text-muted mb-3">You don&apos;t have an active or upcoming stay yet.</p>
+                <Link to="/Reservations/Create" className="palm-btn palm-btn-primary"><i className="bi bi-calendar-plus" />Book a Stay</Link>
+              </div>
+            </div>
+          )}
 
-            {loading ? (
-              <div className="dash-empty">Loading…</div>
-            ) : restaurantReservations.length === 0 ? (
-              <div className="dash-empty"><i className="bi bi-calendar-x" /> No table reservations yet.</div>
-            ) : (
-              restaurantReservations.slice(0, 5).map((r) => {
-                const today = todayISO();
-                const isToday = r.date === today;
-                const ready = canCheckIn(r);
-                return (
-                  <div className="dash-row" key={r.id}>
-                    <div
-                      className="dash-row-thumb"
-                      style={{
-                        background: 'linear-gradient(135deg,#6d4c1d,#9a7a38)',
-                        borderRadius: 10,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: '#fff',
-                        fontSize: '1.3rem',
-                      }}
-                    >
-                      <i className="bi bi-egg-fried" />
-                    </div>
-                    <div>
-                      <div className="dash-row-title">Table {r.tableNumber} · {r.partySize} {r.partySize === 1 ? 'guest' : 'guests'}</div>
-                      <div className="dash-row-meta">
-                        <span>{r.date} · {r.time}</span>
-                        <span>{r.ref}</span>
+          <div className="palm-card">
+            <div className="palm-card-header">
+              <span className="palm-card-title">Restaurant &amp; Table Reservations</span>
+              <Link to="/Restaurant/Reserve" className="palm-btn palm-btn-outline" style={{ padding: '0.4rem 0.75rem', fontSize: '0.76rem' }}>
+                <i className="bi bi-plus-lg" />Reserve a Table
+              </Link>
+            </div>
+            <div className="palm-card-body">
+              {dining.length === 0 ? (
+                <div className="text-muted small py-3"><i className="bi bi-calendar-x me-2" />No table reservations yet.</div>
+              ) : (
+                dining.slice(0, 5).map((r) => {
+                  const isToday = r.date === todayISO();
+                  const ready = canCheckIn(r);
+                  return (
+                    <div className="palm-dining-row" key={r.id}>
+                      <span className="palm-dining-thumb"><i className="bi bi-egg-fried" /></span>
+                      <div className="flex-grow-1">
+                        <div className="palm-dining-title">
+                          Table {r.tableNumber}
+                          <span className={`palm-status-chip ${DINING_STATUS[r.status] || 'info'}`}>{r.status}</span>
+                        </div>
+                        <div className="palm-dining-meta">
+                          {r.partySize} {r.partySize === 1 ? 'guest' : 'guests'} · {r.preference || 'No preference'} · Ref {r.ref}
+                        </div>
+                        <div className="palm-dining-meta">{formatGuestDate(r.date)} · {r.time}</div>
+                      </div>
+                      <div className="palm-dining-actions">
+                        {ready ? (
+                          <button type="button" className="palm-btn palm-btn-green" disabled={checkingIn === r.id} onClick={() => checkIn(r.id)}>
+                            <i className="bi bi-person-check" />{checkingIn === r.id ? 'Checking in…' : 'Check In'}
+                          </button>
+                        ) : r.status === 'CheckedIn' ? (
+                          <Link to={`/Restaurant?table=${r.tableNumber}`} className="palm-btn palm-btn-green">
+                            <i className="bi bi-egg-fried" />Order at Table
+                          </Link>
+                        ) : r.status === 'Reserved' && isToday ? (
+                          <span className="palm-card-sub" style={{ whiteSpace: 'nowrap' }}>Opens at {r.time}</span>
+                        ) : null}
                       </div>
                     </div>
-                    <span className={`dash-status-pill ${RESTAURANT_STATUS_LABEL[r.status] || 'info'}`}>{r.status}</span>
-                    {ready ? (
-                      <button type="button" className="dash-check-btn" disabled={checkingIn === r.id} onClick={() => checkIn(r.id)}>
-                        <i className="bi bi-person-check me-1" />{checkingIn === r.id ? 'Checking in…' : 'Check in'}
-                      </button>
-                    ) : r.status === 'CheckedIn' ? (
-                      <Link to={`/Restaurant?table=${r.tableNumber}`} className="dash-check-btn" style={{ background: '#2f7d4f' }}>
-                        <i className="bi bi-egg-fried me-1" />Order now
-                      </Link>
-                    ) : r.status === 'Reserved' && isToday ? (
-                      <span className="dash-row-meta" style={{ whiteSpace: 'nowrap' }}>Opens at {r.time}</span>
-                    ) : null}
-                  </div>
-                );
-              })
-            )}
+                  );
+                })
+              )}
+              <Link to="/Restaurant/Reserve" className="palm-card-link">View all dining reservations for your stay →</Link>
+            </div>
           </div>
         </div>
 
-        <div className="dash-aside-grid">
-          <div className="dash-panel">
-            <div className="dash-panel-header">
-              <h2>Quick actions</h2>
-            </div>
-            <div className="dash-quick-list">
-              <Link className="dash-quick-item" to="/Amenities/Request"><i className="bi bi-star" /> Request amenities</Link>
-              <Link className="dash-quick-item" to="/Housekeeping/RequestRoomCleaning"><i className="bi bi-broom" /> Request cleaning</Link>
-              <Link className="dash-quick-item" to="/Maintenance/Create"><i className="bi bi-tools" /> Report maintenance</Link>
-              <Link className="dash-quick-item" to="/Fleet/Vehicles"><i className="bi bi-car-front" /> Rent a vehicle</Link>
-              <Link className="dash-quick-item" to="/Fleet/Service"><i className="bi bi-taxi-front" /> Book a shuttle</Link>
-              <Link className="dash-quick-item" to="/Fleet/MyTrips"><i className="bi bi-signpost-split" /> Track my trips</Link>
-              <Link className="dash-quick-item" to="/LostItems/Services"><i className="bi bi-search" /> Report lost item</Link>
-              <Link className="dash-quick-item" to="/Events"><i className="bi bi-calendar-event" /> Book an event</Link>
-              <Link className="dash-quick-item" to="/Restaurant/Reserve"><i className="bi bi-egg-fried" /> Reserve a table</Link>
-            </div>
-          </div>
-
-          <div className="dash-panel dash-summary-card">
-            <div className="dash-panel-header">
-              <h2>Bills</h2>
-              {bills.length > 0 ? <Link className="dash-panel-link" to={`/Payments/Bill/${bills[0].id}`}>Open latest</Link> : null}
-            </div>
-            {bills.length === 0 ? (
-              <div className="dash-empty"><i className="bi bi-receipt" /> No bills yet.</div>
-            ) : (
-              bills.slice(0, 4).map((bill) => (
-                <div className="dash-row dash-row--simple" key={bill.id}>
-                  <div>
-                    <div className="dash-row-title">Bill · Room {bill.roomNumber}</div>
-                    <div className="dash-row-meta">
-                      <span>Balance due {formatPrice(bill.balanceDue)}</span>
-                      <span>{bill.status}</span>
-                    </div>
-                  </div>
-                  <Link className="dash-icon-btn" to={`/Payments/Bill/${bill.id}`}><i className="bi bi-receipt" /></Link>
-                </div>
-              ))
-            )}
-            {totalBalance > 0 && (
-              <div className="dash-notice dash-notice--info" style={{ margin: '1rem', marginBottom: 0 }}>
-                Total outstanding balance: <strong>{formatPrice(totalBalance)}</strong>
+        <div>
+          <div className="palm-card">
+            <div className="palm-card-header"><span className="palm-card-title">Guest Quick Actions</span></div>
+            <div className="palm-card-body">
+              <div className="palm-quick-grid">
+                {QUICK_ACTIONS.map((a) => (
+                  <Link className="palm-quick-item" key={a.to} to={a.to}>
+                    <span className="palm-quick-icon"><i className={`bi ${a.icon}`} /></span>
+                    <span>
+                      <span className="palm-quick-label d-block">{a.label}</span>
+                      <span className="palm-quick-sub">{a.sub}</span>
+                    </span>
+                  </Link>
+                ))}
               </div>
-            )}
+            </div>
           </div>
 
-          <div className="dash-panel dash-summary-card">
-            <div className="dash-panel-header">
-              <h2>Requests</h2>
+          <div className="palm-card">
+            <div className="palm-card-header">
+              <span className="palm-card-title">Today at The Palm</span>
+              <span className="palm-weather-chip"><i className="bi bi-brightness-high" />32°C</span>
             </div>
-            {cleaning.length === 0 && lost.length === 0 ? (
-              <div className="dash-empty"><i className="bi bi-inbox" /> No active requests.</div>
-            ) : (
-              <>
-                {cleaning.map((c) => (
-                  <div className="dash-row dash-row--simple" key={c.id}>
-                    <div>
-                      <div className="dash-row-title">Cleaning request</div>
-                      <div className="dash-row-meta"><span>{c.services.join(', ')}</span></div>
-                    </div>
-                    <span className={`dash-status-pill ${statusTone(c.status)}`}>{c.status}</span>
+            <div className="palm-card-body">
+              {TODAY_AT_THE_PALM.map((item) => (
+                <div className="palm-today-item" key={item.title}>
+                  <span className="palm-today-icon"><i className={`bi ${item.icon}`} /></span>
+                  <div>
+                    <div className="palm-today-title">{item.title}</div>
+                    <div className="palm-today-meta">{item.meta}</div>
                   </div>
-                ))}
-                {lost.map((l) => (
-                  <div className="dash-row dash-row--simple" key={l.id}>
-                    <div>
-                      <div className="dash-row-title">Lost item: {l.item}</div>
-                      <div className="dash-row-meta"><span>{l.category} · {formatDateTime(l.createdAt)}</span></div>
+                </div>
+              ))}
+              <Link to="/Events" className="palm-btn palm-btn-primary w-100 justify-content-center mt-3">
+                <i className="bi bi-calendar-event" />Explore Today&apos;s Event Calendar
+              </Link>
+            </div>
+          </div>
+
+          <div className="palm-card">
+            <div className="palm-card-header"><span className="palm-card-title">Room Folio Balance</span></div>
+            <div className="palm-card-body">
+              {latestBill ? (
+                <>
+                  <div className="palm-folio-total">{formatPrice(latestBill.balanceDue)}</div>
+                  <div className="palm-folio-sub">Estimated when you check out · Room {latestBill.roomNumber}</div>
+                  {folioLines.map((l, i) => (
+                    <div className="palm-folio-line" key={i}>
+                      <span>{l.description}</span>
+                      <span>{formatPrice(l.amount)}</span>
                     </div>
-                    <span className={`dash-status-pill ${l.status === 'Found' ? 'success' : 'warn'}`}>{l.status}</span>
+                  ))}
+                  <div className="palm-folio-actions">
+                    <Link to={`/Payments/Bill/${latestBill.id}`} className="palm-btn palm-btn-outline"><i className="bi bi-receipt" />View Bill</Link>
+                    <Link to={`/Payments/Bill/${latestBill.id}`} className="palm-btn palm-btn-primary"><i className="bi bi-credit-card" />Express Pay &amp; Tip</Link>
                   </div>
-                ))}
-              </>
-            )}
+                </>
+              ) : (
+                <div className="text-muted small py-2"><i className="bi bi-receipt me-2" />No open folio yet.</div>
+              )}
+            </div>
           </div>
         </div>
       </div>

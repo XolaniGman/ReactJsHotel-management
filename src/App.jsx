@@ -64,6 +64,8 @@ import FleetManagerDashboard from './pages/FleetManagerDashboard';
 import FleetIncidentReport from './pages/FleetIncidentReport';
 import FleetIncidents from './pages/FleetIncidents';
 import FleetMaintenance from './pages/FleetMaintenance';
+import FleetHandovers from './pages/FleetHandovers';
+import FleetRecords from './pages/FleetRecords';
 
 const canAccessAdmin = (user) =>
   user?.role === 'admin' && isAdminAccount(user?.email);
@@ -181,11 +183,13 @@ export default function App() {
 
                   <Route path="/Fleet/Dashboard" element={<RequireRole roles={FLEET_ROLES}><FleetDashboard /></RequireRole>} />
                   <Route path="/Fleet/Charges" element={<RequireRole roles={FLEET_ROLES}><FleetCharges /></RequireRole>} />
+                  <Route path="/Fleet/Handovers" element={<RequireRole roles={FLEET_ROLES}><FleetHandovers /></RequireRole>} />
                   <Route path="/Fleet/Handover/:id" element={<RequireRole roles={FLEET_ROLES}><FleetHandover /></RequireRole>} />
                   <Route path="/Fleet/Manager" element={<RequireRole roles={MANAGER_ROLES}><FleetManagerDashboard /></RequireRole>} />
                   <Route path="/Fleet/Incident/Report" element={<RequireAuth><FleetIncidentReport /></RequireAuth>} />
                   <Route path="/Fleet/Incidents" element={<RequireRole roles={FLEET_ROLES}><FleetIncidents /></RequireRole>} />
-                  <Route path="/Fleet/Maintenance" element={<RequireRole roles={MANAGER_ROLES}><FleetMaintenance /></RequireRole>} />
+                  <Route path="/Fleet/Maintenance" element={<RequireRole roles={FLEET_ROLES}><FleetMaintenance /></RequireRole>} />
+                  <Route path="/Fleet/Records" element={<RequireRole roles={FLEET_ROLES}><FleetRecords /></RequireRole>} />
 
                   <Route path="/Admin/Dashboard" element={<RequireRole roles={ADMIN_ROLES}><AdminDashboard /></RequireRole>} />
                   <Route path="/Admin/Reservations" element={<RequireRole roles={ADMIN_ROLES}><AdminReservations /></RequireRole>} />

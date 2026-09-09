@@ -2,11 +2,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { listFleetVehicles } from '../services/fleetService';
-import { smartMatchVehicles } from '../lib/fleetAlgo';
+import { smartMatchVehicles, vehicleRateCard, vehicleRatingInfo } from '../lib/fleetAlgo';
 import { formatPrice, todayISO, addDaysISO, nightsBetween } from '../lib/utils';
-import { VEHICLE_TYPES, VEHICLE_CATEGORIES, VEHICLE_TRANSMISSIONS } from '../lib/constants';
+import { VEHICLE_TYPES, VEHICLE_CATEGORIES, VEHICLE_TRANSMISSIONS, HOURLY_FUEL_SURCHARGE } from '../lib/constants';
 import './rooms.css';
 import './fleet.css';
+import './palm.css';
 
 const DEFAULT_IMG =
   'https://images.unsplash.com/photo-1542362567-b07e54358753?auto=format&fit=crop&w=1200&q=80';
@@ -21,6 +22,8 @@ export default function FleetVehicles() {
   const [transmission, setTransmission] = useState('All');
   const [availability, setAvailability] = useState('All');
   const [sort, setSort] = useState('price');
+  const [view, setView] = useState('cards');
+  const [moreFiltersOpen, setMoreFiltersOpen] = useState(false);
   const [pickupDate, setPickupDate] = useState(searchParams.get('pickup') || todayISO());
   const [dropoffDate, setDropoffDate] = useState(searchParams.get('dropoff') || addDaysISO(todayISO(), 3));
 
@@ -37,6 +40,9 @@ export default function FleetVehicles() {
   }, []);
 
   const days = Math.max(1, nightsBetween(pickupDate, dropoffDate) || 1);
+
+  const primaryFiltersSet = type !== 'All' || category !== 'All' || transmission !== 'All';
+  const showMoreFilters = moreFiltersOpen || primaryFiltersSet;
 
   const filtered = useMemo(() => {
     let list = vehicles.filter(
@@ -64,27 +70,43 @@ export default function FleetVehicles() {
   }, [vehicles]);
 
   return (
-    <div className="san-shell">
-      <div className="san-header">
-        <div className="san-kicker">Vehicles Hub</div>
-        <h1 className="san-title">Car Rental &amp; Shuttle Fleet</h1>
-        <p className="san-intro">
-          Explore our vehicles available for hire during your stay — or catch a hotel shuttle for
-          a point-to-point trip. Every vehicle-specific rate, spec and estimated total is shown
-          upfront.
-        </p>
+    <div className="san-shell palm-page">
+      <div className="palm-page-header">
+        <div>
+          <div className="palm-page-kicker">Vehicles Hub</div>
+          <h1 className="palm-page-title">Car Rental &amp; Shuttle Fleet</h1>
+          <p className="palm-page-copy">
+            Explore our vehicles available for hire during your stay — or catch a hotel shuttle for
+            a point-to-point trip. Every vehicle-specific rate, spec and estimated total is shown
+            upfront.
+          </p>
+        </div>
       </div>
 
-      <div className="san-filter-card">
-        <div className="san-filter-header">
+      <div className="palm-card">
+        <div className="palm-card-header">
           <div>
-            <h2 className="san-filter-title">Find your ride</h2>
-            <p className="san-filter-sub">Filter by type, transmission, availability and your rental window.</p>
+            <span className="palm-card-title d-block">Find your ride</span>
+            <span className="palm-card-sub">Filter by type, transmission, availability and your rental window.</span>
           </div>
-          <Link to="/Fleet/Service" className="san-btn-primary">
-            <i className="bi bi-taxi-front me-2" /> Request a shuttle
-          </Link>
+          <div className="d-flex gap-2 align-items-center">
+            <div className="fleet-view-toggle">
+              <button type="button" className={view === 'cards' ? 'active' : ''} onClick={() => setView('cards')}>
+                <i className="bi bi-grid me-1" /> Cards
+              </button>
+              <button type="button" className={view === 'list' ? 'active' : ''} onClick={() => setView('list')}>
+                <i className="bi bi-list-ul me-1" /> List
+              </button>
+              <button type="button" className={view === 'pricing' ? 'active' : ''} onClick={() => setView('pricing')}>
+                <i className="bi bi-table me-1" /> Pricing table
+              </button>
+            </div>
+            <Link to="/Fleet/Service" className="palm-btn palm-btn-primary">
+              <i className="bi bi-taxi-front" /> Request a shuttle
+            </Link>
+          </div>
         </div>
+        <div className="palm-card-body">
         <div className="san-filter-body">
           <div className="filter-row">
             <div>
@@ -108,36 +130,51 @@ export default function FleetVehicles() {
                 {VEHICLE_TRANSMISSIONS.map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
-            <div>
-              <label className="san-label" htmlFor="VAvail">Availability</label>
-              <select id="VAvail" className="san-select" value={availability} onChange={(e) => setAvailability(e.target.value)}>
-                <option value="All">All</option>
-                <option value="Available">Available now</option>
-                <option value="Busy">Reserved / in service</option>
-              </select>
-            </div>
-            <div>
-              <label className="san-label">Rental window</label>
-              <div className="d-flex gap-1">
-                <input type="date" className="san-select" style={{ width: 'auto' }} value={pickupDate} min={todayISO()} onChange={(e) => setPickupDate(e.target.value)} />
-                <input type="date" className="san-select" style={{ width: 'auto' }} value={dropoffDate} min={pickupDate} onChange={(e) => setDropoffDate(e.target.value)} />
+            {showMoreFilters ? (
+              <>
+                <div>
+                  <label className="san-label" htmlFor="VAvail">Availability</label>
+                  <select id="VAvail" className="san-select" value={availability} onChange={(e) => setAvailability(e.target.value)}>
+                    <option value="All">All</option>
+                    <option value="Available">Available now</option>
+                    <option value="Busy">Reserved / in service</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="san-label">Rental window</label>
+                  <div className="d-flex gap-1">
+                    <input type="date" className="san-select" style={{ width: 'auto' }} value={pickupDate} min={todayISO()} onChange={(e) => setPickupDate(e.target.value)} />
+                    <input type="date" className="san-select" style={{ width: 'auto' }} value={dropoffDate} min={pickupDate} onChange={(e) => setDropoffDate(e.target.value)} />
+                  </div>
+                </div>
+                <div>
+                  <label className="san-label" htmlFor="VSort">Sort by</label>
+                  <select id="VSort" className="san-select" value={sort} onChange={(e) => setSort(e.target.value)}>
+                    <option value="price">Price (low → high)</option>
+                    <option value="priceDesc">Price (high → low)</option>
+                    <option value="capacity">Seating capacity</option>
+                    <option value="match">Smart match (recommended)</option>
+                  </select>
+                </div>
+                <div className="filter-actions">
+                  <button
+                    type="button"
+                    className="palm-btn palm-btn-outline"
+                    onClick={() => { setType('All'); setCategory('All'); setTransmission('All'); setAvailability('All'); setSort('price'); setMoreFiltersOpen(false); }}
+                  >
+                    Reset
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="filter-actions">
+                <button type="button" className="palm-btn palm-btn-outline" onClick={() => setMoreFiltersOpen(true)}>
+                  <i className="bi bi-sliders me-1" /> More filters
+                </button>
               </div>
-            </div>
-            <div>
-              <label className="san-label" htmlFor="VSort">Sort by</label>
-              <select id="VSort" className="san-select" value={sort} onChange={(e) => setSort(e.target.value)}>
-                <option value="price">Price (low → high)</option>
-                <option value="priceDesc">Price (high → low)</option>
-                <option value="capacity">Seating capacity</option>
-                <option value="match">Smart match (recommended)</option>
-              </select>
-            </div>
-            <div className="filter-actions">
-              <button type="button" className="san-btn-secondary" onClick={() => { setType('All'); setCategory('All'); setTransmission('All'); setAvailability('All'); setSort('price'); }}>
-                Reset
-              </button>
-            </div>
+            )}
           </div>
+        </div>
         </div>
       </div>
 
@@ -145,6 +182,123 @@ export default function FleetVehicles() {
         <p className="text-center text-muted py-5">Loading fleet…</p>
       ) : filtered.length === 0 ? (
         <div className="san-empty">No vehicles match your filters. Try a different combination.</div>
+      ) : view === 'list' ? (
+        <div className="fleet-list-view">
+          {filtered.map((v) => {
+            const busy = v.status !== 'Available';
+            const { rating, reviewCount, isPlaceholder } = vehicleRatingInfo(v);
+            const fullStars = Math.round(rating);
+            const features = v.features || [];
+            const mid = Math.ceil(features.length / 2);
+            const colA = features.slice(0, mid);
+            const colB = features.slice(mid);
+            const RowInner = (
+              <>
+                <div className="flv-image">
+                  <img src={v.image || DEFAULT_IMG} alt={v.name} loading="lazy" />
+                  {busy && <span className={`fleet-badge fleet-badge-${v.status}`}>{v.status}</span>}
+                </div>
+                <div className="flv-body">
+                  <div className="flv-top">
+                    <div>
+                      <h3>{v.name}</h3>
+                      <div className="flv-stars">
+                        {[0, 1, 2, 3, 4].map((i) => (
+                          <i key={i} className={i < fullStars ? 'bi bi-star-fill' : 'bi bi-star'} />
+                        ))}
+                        <span>{reviewCount > 0 ? `${reviewCount} review${reviewCount === 1 ? '' : 's'}` : 'New listing'}{isPlaceholder ? ' (est.)' : ''}</span>
+                      </div>
+                    </div>
+                    <div className="flv-price">
+                      {formatPrice(v.pricePerDay)}
+                      <small>Per Day</small>
+                    </div>
+                  </div>
+
+                  <div className="flv-specs">
+                    <span><i className="bi bi-people" />{v.capacity}</span>
+                    <span><i className="bi bi-gear" />{v.transmission}</span>
+                    <span><i className="bi bi-fuel-pump" />{v.fuelType}</span>
+                    <span><i className="bi bi-car-front" />{v.category || v.type}</span>
+                  </div>
+
+                  {features.length > 0 && (
+                    <>
+                      <hr />
+                      <div className="flv-features">
+                        <div>
+                          {colA.map((f) => <div key={f}><i className="bi bi-check2" />{f}</div>)}
+                        </div>
+                        <div>
+                          {colB.map((f) => <div key={f}><i className="bi bi-check2" />{f}</div>)}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </>
+            );
+            return busy ? (
+              <div key={v.id} className="flv-row is-muted">{RowInner}</div>
+            ) : (
+              <Link key={v.id} to={`/Fleet/Rent?vehicle=${v.id}&pickup=${pickupDate}&dropoff=${dropoffDate}`} className="flv-row">
+                {RowInner}
+              </Link>
+            );
+          })}
+        </div>
+      ) : view === 'pricing' ? (
+        <div className="palm-card fleet-pricing-wrap">
+          <div className="table-responsive">
+            <table className="fleet-pricing-table">
+              <thead>
+                <tr>
+                  <th className="fpt-veh">Vehicle</th>
+                  <th className="fpt-rate fpt-hour">Per Hour Rate</th>
+                  <th className="fpt-rate fpt-day">Per Day Rate</th>
+                  <th className="fpt-rate fpt-lease">Leasing</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((v) => {
+                  const busy = v.status !== 'Available';
+                  const rates = vehicleRateCard(v);
+                  return (
+                    <tr key={v.id} className={busy ? 'is-muted' : ''}>
+                      <td className="fpt-veh">
+                        <div className="fpt-veh-cell">
+                          <img src={v.image || DEFAULT_IMG} alt={v.name} loading="lazy" />
+                          <div>
+                            <strong>{v.name}</strong>
+                            <span>{v.category || v.type} · {v.transmission} · {v.capacity} seats</span>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="fpt-rate">
+                        <div className="fpt-amount">{formatPrice(rates.perHour)} <small>/ hour</small></div>
+                        <div className="fpt-sub">{formatPrice(HOURLY_FUEL_SURCHARGE)}/hour fuel surcharges</div>
+                      </td>
+                      <td className="fpt-rate">
+                        <div className="fpt-amount">{formatPrice(rates.perDay)} <small>/ day</small></div>
+                        <div className="fpt-sub">Dynamic rate applied at checkout</div>
+                      </td>
+                      <td className="fpt-rate">
+                        <div className="fpt-amount">{formatPrice(rates.perMonth)} <small>/ month</small></div>
+                        <div className="fpt-sub">
+                          {busy ? (
+                            <span className="fleet-badge fleet-badge-Reserved">{v.status}</span>
+                          ) : (
+                            <Link to={`/Fleet/Rent?vehicle=${v.id}&pickup=${pickupDate}&dropoff=${dropoffDate}`}>Rent this vehicle →</Link>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
       ) : (
         <div className="san-room-grid">
           {filtered.map((v) => {

@@ -3,12 +3,14 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { createCarService, computeFareEstimate, listMyCarServices, listFleetVehicles } from '../services/fleetService';
 import { listUserReservations } from '../services/reservationService';
+import { noticePeriodCheck } from '../lib/fleetAlgo';
 import { formatPrice, formatDateTime, statusTone } from '../lib/utils';
-import { CAR_SERVICE_TYPES, PAYMENT_METHODS } from '../lib/constants';
+import { CAR_SERVICE_TYPES, PAYMENT_METHODS, SERVICE_NOTICE_HOURS } from '../lib/constants';
 import FleetMap from '../components/FleetMap';
 import './guest.css';
 import './rooms.css';
 import './fleet.css';
+import './palm.css';
 
 export default function FleetService() {
   const { user } = useAuth();
@@ -52,8 +54,12 @@ export default function FleetService() {
     setSuccess('');
     if (!pickupLocation.trim() || !destination.trim()) return setError('Please provide both pickup and destination.');
     if (!pickupDate) return setError('Please choose a date for the trip.');
+    const notice = noticePeriodCheck(serviceType, pickupDate, pickupTime);
+    if (!notice.ok) {
+      return setError(`${serviceType} requests need at least ${notice.hoursRequired}h notice — this pickup is only ${Math.max(0, notice.hoursNotice)}h away. Please choose a later time.`);
+    }
     setSubmitting(true);
-    await createCarService({
+    const result = await createCarService({
       guestUid: user.uid,
       guestName: user.name,
       serviceType,
@@ -70,6 +76,7 @@ export default function FleetService() {
       notes,
     });
     setSubmitting(false);
+    if (result?.error) return setError(result.error);
     setPickupLocation('');
     setDestination('');
     setNotes('');
@@ -101,37 +108,39 @@ export default function FleetService() {
   };
 
   return (
-    <div className="clean-shell">
-      <div className="lost-top">
+    <div className="clean-shell palm-page">
+      <div className="palm-page-header">
         <div>
-          <div className="lost-kicker">Hotel Shuttle &amp; Car Service</div>
-          <h1 className="lost-title">Request a point-to-point trip</h1>
-          <p className="lost-copy">
+          <div className="palm-page-kicker">Hotel Shuttle &amp; Car Service</div>
+          <h1 className="palm-page-title">Request a point-to-point trip</h1>
+          <p className="palm-page-copy">
             Need an airport transfer or a local trip? Let us know where you’re going and our
             dispatch team will pair you with an available driver.
           </p>
         </div>
-        <Link to="/Fleet/Vehicles" className="san-btn-secondary">
-          <i className="bi bi-arrow-left me-2" /> Back to fleet
+        <Link to="/Fleet/Vehicles" className="palm-btn palm-btn-outline">
+          <i className="bi bi-arrow-left" /> Back to fleet
         </Link>
       </div>
 
-      {error && <div className="lost-alert lost-alert-danger"><i className="bi bi-exclamation-triangle me-2" />{error}</div>}
-      {success && <div className="lost-alert lost-alert-success"><i className="bi bi-check-circle me-2" />{success}</div>}
+      {error && <div className="palm-alert palm-alert-danger"><i className="bi bi-exclamation-triangle" />{error}</div>}
+      {success && <div className="palm-alert palm-alert-success"><i className="bi bi-check-circle" />{success}</div>}
 
       <div className="row g-4">
         <div className="col-lg-7">
-          <form className="fleet-form-section" onSubmit={submit}>
+          <form className="palm-card" onSubmit={submit}>
+            <div className="palm-card-body pt-4">
             <div className="row g-3">
               <div className="col-md-6">
                 <label className="book-label" htmlFor="SType">Trip type</label>
                 <select id="SType" className="form-select book-input" value={serviceType} onChange={(e) => setServiceType(e.target.value)}>
                   {CAR_SERVICE_TYPES.map((t) => <option key={t}>{t}</option>)}
                 </select>
+                <div className="text-muted small mt-1">Needs at least {SERVICE_NOTICE_HOURS[serviceType] || 0}h notice before pickup.</div>
               </div>
               <div className="col-md-6">
                 <label className="book-label">Estimated fare</label>
-                <div className="form-control book-input bg-light" style={{ fontWeight: 800, color: '#775a19' }}>
+                <div className="form-control book-input bg-light" style={{ fontWeight: 800, color: 'var(--palm-accent-dark)' }}>
                   {formatPrice(computeFareEstimate({ serviceType }))}
                 </div>
               </div>
@@ -240,34 +249,40 @@ export default function FleetService() {
             </div>
 
             {!activeRes && !reservationId && (
-              <div className="dash-notice mt-3" style={{ margin: '1rem 0 0' }}>
-                <i className="bi bi-info-circle me-2" />You don’t have an active stay, so this trip is recorded without a room folio.
+              <div className="palm-alert palm-alert-info mt-3">
+                <i className="bi bi-info-circle" />You don’t have an active stay, so this trip is recorded without a room folio.
               </div>
             )}
 
-            <button type="submit" className="book-submit mt-4" disabled={submitting}>
-              <i className="bi bi-taxi-front me-2" />{submitting ? 'Submitting…' : 'Submit service request'}
+            <button type="submit" className="palm-btn palm-btn-primary mt-4" disabled={submitting}>
+              <i className="bi bi-taxi-front" />{submitting ? 'Submitting…' : 'Submit service request'}
             </button>
+            </div>
           </form>
         </div>
 
         <div className="col-lg-5">
-          {requests.length === 0 ? (
-            <div className="dash-empty"><i className="bi bi-taxi-front me-2" />No service requests yet.</div>
-          ) : (
-            requests.slice(0, 8).map((s) => (
-              <div key={s.id} className="dash-row dash-row--simple">
-                <div>
-                  <div className="dash-row-title">{s.serviceType}{s.vehicleName ? ` · ${s.vehicleName}` : ''} · {s.ref}</div>
-                  <div className="dash-row-meta">
-                    <span>{s.pickupLocation} → {s.destination}</span>
-                    <span>{formatPrice(s.estimatedFare)} · {formatDateTime(s.createdAt)}</span>
+          <div className="palm-card">
+            <div className="palm-card-header"><span className="palm-card-title">My service requests</span></div>
+            <div className="palm-card-body">
+              {requests.length === 0 ? (
+                <div className="palm-empty"><i className="bi bi-taxi-front d-block mb-2" style={{ fontSize: '1.4rem' }} />No service requests yet.</div>
+              ) : (
+                requests.slice(0, 8).map((s) => (
+                  <div key={s.id} className="palm-list-row">
+                    <div>
+                      <div className="palm-list-title">{s.serviceType}{s.vehicleName ? ` · ${s.vehicleName}` : ''} · {s.ref}</div>
+                      <div className="palm-list-meta">
+                        <span>{s.pickupLocation} → {s.destination}</span>
+                        <span>{formatPrice(s.estimatedFare)} · {formatDateTime(s.createdAt)}</span>
+                      </div>
+                    </div>
+                    <span className={`palm-status-chip ${statusTone(s.status)}`}>{s.status}</span>
                   </div>
-                </div>
-                <span className={`dash-status-pill ${statusTone(s.status)}`}>{s.status}</span>
-              </div>
-            ))
-          )}
+                ))
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </div>

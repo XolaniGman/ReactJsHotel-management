@@ -7,6 +7,7 @@ import { createReservation } from '../services/reservationService';
 import { computeTotals } from '../services/billService';
 import { formatPrice, todayISO, nightsBetween } from '../lib/utils';
 import { BOOKING_CATEGORIES } from '../lib/constants';
+import './palm.css';
 
 const DEFAULT_IMG =
   'https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?auto=format&fit=crop&w=1200&q=80';
@@ -129,24 +130,24 @@ export default function ReservationCreate() {
 
   if (created) {
     return (
-      <div className="book-page">
-        <div className="book-card" style={{ maxWidth: 640, margin: '3rem auto', padding: '2rem', textAlign: 'center' }}>
-          <div className="book-kicker" style={{ background: '#eef8f1', color: '#2f7d4f' }}>
-            <i className="bi bi-check-circle" /> Reservation submitted
+      <div className="book-page palm-page">
+        <div className="palm-card" style={{ maxWidth: 640, margin: '3rem auto', padding: '2rem', textAlign: 'center' }}>
+          <div className="palm-status-chip success mb-3" style={{ display: 'inline-flex', fontSize: '0.72rem', padding: '0.4rem 0.8rem' }}>
+            <i className="bi bi-check-circle me-1" /> Reservation submitted
           </div>
-          <h1 className="res-title" style={{ fontSize: '2rem' }}>Request received</h1>
-          <p className="book-subtitle" style={{ color: '#6d7483' }}>
+          <h1 className="palm-page-title" style={{ fontSize: '2rem' }}>Request received</h1>
+          <p className="palm-page-copy mx-auto">
             Your reservation <strong>{created.bookingRef}</strong> is <strong>Pending</strong>. Our
             team will confirm availability and approve your stay shortly.
           </p>
-          <div className="book-summary" style={{ margin: '1.5rem 0' }}>
+          <div className="book-summary" style={{ margin: '1.5rem 0', boxShadow: 'none', border: '1px solid var(--palm-border)' }}>
             <div className="book-summary-row"><span>Room</span><strong>Room {created.roomNumber} · {created.roomType}</strong></div>
             <div className="book-summary-row"><span>Dates</span><strong>{checkIn} → {checkOut} ({nights} night(s))</strong></div>
             <div className="book-summary-row"><span>Estimated total</span><strong>{formatPrice(created.total)}</strong></div>
           </div>
           <div className="d-flex justify-content-center gap-2 flex-wrap">
-            <Link to={`/Reservations/Details/${created.id}`} className="res-btn res-btn-primary">View reservation</Link>
-            <Link to="/Guest/Dashboard" className="res-btn res-btn-outline">My dashboard</Link>
+            <Link to={`/Reservations/Details/${created.id}`} className="palm-btn palm-btn-primary">View reservation</Link>
+            <Link to="/Guest/Dashboard" className="palm-btn palm-btn-outline">My dashboard</Link>
           </div>
         </div>
       </div>
@@ -154,31 +155,27 @@ export default function ReservationCreate() {
   }
 
   return (
-    <div className="book-page">
-      <div className="book-hero">
-        <div className="book-hero-inner">
-          <span className="book-kicker"><i className="bi bi-calendar-heart" /> Book your stay</span>
-          <h1 className="book-title">Reserve your room</h1>
-          <p className="book-subtitle">
+    <div className="book-page palm-page">
+      <div className="palm-page-header">
+        <div>
+          <div className="palm-page-kicker"><i className="bi bi-calendar-heart me-1" /> Book your stay</div>
+          <h1 className="palm-page-title">Reserve your room</h1>
+          <p className="palm-page-copy">
             Choose your dates, pick a room, add extras and submit your reservation. Payment is
             settled at checkout.
           </p>
         </div>
       </div>
 
-      <div className="d-flex justify-content-center mb-4 flex-wrap gap-2">
+      <div className="palm-step-track justify-content-center">
         {STEPS.map((s, i) => (
-          <span
-            key={s}
-            className={`badge px-3 py-2 ${i <= step ? 'bg-dark text-white' : 'bg-light text-secondary border'}`}
-            style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}
-          >
+          <span key={s} className={`palm-step ${i <= step ? 'active' : ''}`}>
             {i + 1}. {s}
           </span>
         ))}
       </div>
 
-      {error && <div className="book-alert"><i className="bi bi-exclamation-triangle me-2" />{error}</div>}
+      {error && <div className="palm-alert palm-alert-danger"><i className="bi bi-exclamation-triangle" />{error}</div>}
 
       <div className="book-grid">
         <div className="book-card">
@@ -325,17 +322,17 @@ export default function ReservationCreate() {
 
             <div className="d-flex justify-content-between mt-4">
               {step > 0 ? (
-                <button type="button" className="book-cancel" onClick={() => setStep(step - 1)}>
-                  <i className="bi bi-arrow-left me-2" /> Back
+                <button type="button" className="palm-btn palm-btn-outline" onClick={() => setStep(step - 1)}>
+                  <i className="bi bi-arrow-left" /> Back
                 </button>
               ) : <span />}
               {step < STEPS.length - 1 ? (
-                <button type="button" className="book-submit" style={{ width: 'auto', paddingInline: '2rem' }} onClick={() => go(step + 1)}>
-                  Continue <i className="bi bi-arrow-right ms-2" />
+                <button type="button" className="palm-btn palm-btn-primary" onClick={() => go(step + 1)}>
+                  Continue <i className="bi bi-arrow-right" />
                 </button>
               ) : (
-                <button type="button" className="book-submit" style={{ width: 'auto', paddingInline: '2rem' }} onClick={submit} disabled={submitting}>
-                  <i className="bi bi-send me-2" /> {submitting ? 'Submitting…' : 'Submit reservation'}
+                <button type="button" className="palm-btn palm-btn-primary" onClick={submit} disabled={submitting}>
+                  <i className="bi bi-send" /> {submitting ? 'Submitting…' : 'Submit reservation'}
                 </button>
               )}
             </div>

@@ -10,10 +10,12 @@ import {
   updateFleetWorkOrder,
   bookingDisplay,
 } from '../services/fleetService';
-import { formatPrice, formatDateTime, todayISO, addDaysISO } from '../lib/utils';
+import { formatPrice, formatDateTime } from '../lib/utils';
+import './maintenance.css';
 import './guest.css';
 import './rooms.css';
 import './fleet.css';
+import './palm.css';
 
 const APPROVAL_THRESHOLD = 2000;
 const RTC_ITEMS = [
@@ -26,17 +28,37 @@ const RTC_ITEMS = [
 ];
 const STATUSES = ['All', 'Open', 'AwaitingApproval', 'InProgress', 'AwaitingParts', 'Completed', 'SignedOff'];
 const SOURCES = ['Scheduled', 'Predictive', 'Incident', 'Manual'];
+const SOURCE_FILTERS = [
+  { key: 'Damage', label: 'Damage · check-in & incidents', icon: 'bi-bug-fill' },
+  { key: 'All', label: 'All sources', icon: 'bi-collection' },
+  { key: 'CheckIn', label: 'Check-in damage', icon: 'bi-box-arrow-in-down' },
+  { key: 'Incident', label: 'Incident', icon: 'bi-exclamation-diamond' },
+  { key: 'Scheduled', label: 'Scheduled', icon: 'bi-calendar-check' },
+  { key: 'Predictive', label: 'Predictive', icon: 'bi-graph-up-arrow' },
+  { key: 'Manual', label: 'Manual', icon: 'bi-tools' },
+];
+
+const SOURCE_TAG = {
+  CheckIn: { label: 'Check-in damage', icon: 'bi-box-arrow-in-down' },
+  Incident: { label: 'Incident damage', icon: 'bi-exclamation-diamond' },
+  Scheduled: { label: 'Scheduled service', icon: 'bi-calendar-check' },
+  Predictive: { label: 'Predictive', icon: 'bi-graph-up-arrow' },
+  Manual: { label: 'Manual', icon: 'bi-tools' },
+};
 
 export default function FleetMaintenance() {
   const { user } = useAuth();
+  const isManager = ['fleetmanager', 'admin', 'system'].includes(user?.role);
   const [orders, setOrders] = useState([]);
   const [vehicles, setVehicles] = useState([]);
   const [drivers, setDrivers] = useState([]);
   const [statusFilter, setStatusFilter] = useState('All');
+  const [sourceFilter, setSourceFilter] = useState('Damage');
   const [showNew, setShowNew] = useState(false);
   const [form, setForm] = useState({ vehicleId: '', source: 'Manual', priority: 'Normal', title: '', description: '', technician: '', workshop: '', parts: '', estimatedCost: '' });
   const [rtc, setRtc] = useState(null); // { id, items: {label: bool} }
   const [partDraft, setPartDraft] = useState('');
+  const [assignDraft, setAssignDraft] = useState({});
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -51,32 +73,21 @@ export default function FleetMaintenance() {
     };
   }, []);
 
-  const serviceDue = useMemo(
-    () =>
-      (vehicles || [])
-        .filter((v) => v.status !== 'OutOfService' && v.nextServiceDate && new Date(v.nextServiceDate) <= new Date(addDaysISO(todayISO(), 30)))
-        .sort((a, b) => new Date(a.nextServiceDate) - new Date(b.nextServiceDate)),
-    [vehicles],
-  );
+  const filtered = useMemo(() => {
+    const byStatus = statusFilter === 'All' ? orders : orders.filter((o) => o.status === statusFilter);
+    if (sourceFilter === 'All') return byStatus;
+    if (sourceFilter === 'Damage') return byStatus.filter((o) => o.source === 'CheckIn' || o.source === 'Incident');
+    return byStatus.filter((o) => (o.source || '') === sourceFilter);
+  }, [orders, statusFilter, sourceFilter]);
 
-  const filtered = useMemo(() => (statusFilter === 'All' ? orders : orders.filter((o) => o.status === statusFilter)), [orders, statusFilter]);
+  const technicianSuggestions = useMemo(() => {
+    const names = new Set();
+    drivers.forEach((d) => d.name && names.add(d.name));
+    orders.forEach((o) => o.technician && names.add(o.technician));
+    return [...names].sort();
+  }, [drivers, orders]);
 
   const countBy = (s) => orders.filter((o) => o.status === s).length;
-
-  const prefillScheduled = (v) => {
-    setForm({
-      vehicleId: v.id,
-      source: 'Scheduled',
-      priority: 'High',
-      title: 'Scheduled service',
-      description: `Service due ${formatDateTime(v.nextServiceDate)} — ${v.name} unit ${v.unitNumber}.`,
-      technician: '',
-      workshop: '',
-      parts: '',
-      estimatedCost: '',
-    });
-    setShowNew(true);
-  };
 
   const doCreate = async (e) => {
     e.preventDefault();
@@ -134,14 +145,28 @@ export default function FleetMaintenance() {
   };
 
   const openRtc = (wo) => {
-    setRtc({ id: wo.id, items: Object.fromEntries(RTC_ITEMS.map((i) => [i, false])), current: wo });
+    const v = vehicleOf(wo.vehicleId);
+    setRtc({
+      id: wo.id,
+      items: Object.fromEntries(RTC_ITEMS.map((i) => [i, false])),
+      current: wo,
+      finalCost: wo.estimatedCost || '',
+      odometer: v?.mileage || '',
+    });
   };
 
   const complete = async (wo) => {
     const checklist = rtc.items;
     const allPass = Object.values(checklist).every(Boolean);
     if (!allPass) return setError('Every return-to-service item must pass before the unit can complete.');
-    const res = await advanceFleetWorkOrder(wo.id, 'Completed', { by: user.name, checklist, note: 'Repair complete — awaiting sign-off' });
+    if (!rtc.finalCost || Number(rtc.finalCost) <= 0) return setError('Enter the final repair cost before completing.');
+    const res = await advanceFleetWorkOrder(wo.id, 'Completed', {
+      by: user.name,
+      checklist,
+      finalCost: rtc.finalCost,
+      mileageAtCompletion: rtc.odometer,
+      note: `Repair complete — final cost ${formatPrice(rtc.finalCost)} — awaiting sign-off`,
+    });
     if (res?.error) return setError(res.error);
     setRtc(null);
   };
@@ -155,37 +180,53 @@ export default function FleetMaintenance() {
   };
 
   const approve = async (wo) => {
-    await updateFleetWorkOrder(wo.id, { patch: { status: 'Open' }, by: user.name, note: 'Estimate approved by manager' });
+    if (!isManager) return setError('Only a Fleet or Hotel Manager can approve estimates above the approval threshold.');
+    await updateFleetWorkOrder(wo.id, { patch: { status: 'Open' }, by: user.name, note: `Estimate approved by ${user.name} (${user.role})` });
   };
 
   const cancelWo = async (wo) => {
+    if (!isManager) return setError('Only a Fleet or Hotel Manager can cancel a work order.');
     await updateFleetWorkOrder(wo.id, { patch: { status: 'Cancelled' }, by: user.name, note: 'Work order cancelled' });
   };
 
   const vehicleOf = (id) => vehicles.find((v) => v.id === id);
+  // A vehicle currently out with a guest can't be scheduled for workshop time.
+  const outOnRental = (v) => v.status === 'Reserved';
+  const eligibleForWorkOrder = vehicles.filter((v) => v.status !== 'OutOfService' && !outOnRental(v));
 
   return (
-    <div className="clean-shell">
-      <div className="lost-top">
-        <div>
-          <div className="lost-kicker">Fleet · Workshop &amp; Maintenance</div>
-          <h1 className="lost-title">Repair &amp; maintenance work orders</h1>
-          <p className="lost-copy">
-            Track scheduled servicing and incident-driven repairs, order parts, get cost approval, run the
-            return-to-service checklist and sign units back on the road.
-          </p>
+    <div className="maint-dash-bg palm-page fleet-manager-page">
+      <datalist id="technician-roster">
+        {technicianSuggestions.map((name) => <option key={name} value={name} />)}
+      </datalist>
+      <div className="maint-dash">
+        <div
+          className="palm-hero fleet-manager-hero"
+          style={{ backgroundImage: "url('https://images.unsplash.com/photo-1487754180451-c456f719a1fc?auto=format&fit=crop&w=1600&q=80')" }}
+        >
+          <div className="palm-hero-badges">
+            <span className="palm-hero-pill status"><i className="bi bi-circle-fill me-1" />Workshop</span>
+            <span className="palm-hero-pill">{countBy('Open') + countBy('InProgress')} active job(s)</span>
+          </div>
+          <div className="palm-hero-body">
+            <div className="palm-hero-kicker">Fleet · Workshop &amp; Maintenance</div>
+            <h1 className="palm-hero-title">Repair &amp; maintenance work orders</h1>
+            <p className="palm-hero-copy">
+              Track scheduled servicing and incident-driven repairs, order parts, get cost approval, run the
+              return-to-service checklist and sign units back on the road.
+            </p>
+            <div className="palm-hero-actions">
+              <button type="button" className="palm-btn palm-btn-primary" onClick={() => setShowNew((v) => !v)}>
+                <i className="bi bi-wrench-adjustable" />New work order
+              </button>
+              <Link to="/Fleet/Incidents" className="palm-btn palm-btn-light"><i className="bi bi-bug" />Incidents</Link>
+              <Link to="/Fleet/Manager" className="palm-hero-link">Fleet reports →</Link>
+            </div>
+          </div>
         </div>
-        <div className="d-flex gap-2">
-          <button type="button" className="san-btn-primary" onClick={() => setShowNew((v) => !v)}>
-            <i className="bi bi-wrench-adjustable me-2" />New work order
-          </button>
-          <Link to="/Fleet/Incidents" className="san-btn-secondary"><i className="bi bi-bug me-2" />Incidents</Link>
-          <Link to="/Fleet/Manager" className="san-btn-secondary"><i className="bi bi-graph-up me-2" />Reports</Link>
-        </div>
-      </div>
 
-      {error && <div className="lost-alert lost-alert-danger"><i className="bi bi-exclamation-triangle me-2" />{error}</div>}
-      {notice && <div className="lost-alert lost-alert-success"><i className="bi bi-check-circle me-2" />{notice}</div>}
+        {error && <div className="palm-alert palm-alert-danger"><i className="bi bi-exclamation-triangle" />{error}</div>}
+        {notice && <div className="palm-alert palm-alert-success"><i className="bi bi-check-circle" />{notice}</div>}
 
       <div className="metric-grid mb-4">
         {[
@@ -204,32 +245,20 @@ export default function FleetMaintenance() {
         ))}
       </div>
 
-      {serviceDue.length > 0 && (
-        <div className="dash-panel mb-4">
-          <div className="dash-panel-header"><h2>Due for service · next 30 days</h2></div>
-          <div className="d-flex flex-wrap gap-2 p-3">
-            {serviceDue.map((v) => (
-              <button key={v.id} type="button" className="btn btn-sm btn-outline-secondary" onClick={() => prefillScheduled(v)}>
-                <i className="bi bi-calendar-event me-1" />{v.unitNumber} · {v.name} — due {formatDateTime(v.nextServiceDate)}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
       {showNew && (
-        <form className="dash-panel mb-4" onSubmit={doCreate}>
-          <div className="dash-panel-header"><h2>Create work order</h2></div>
+        <form className="panel-card mb-4" onSubmit={doCreate}>
+          <div className="panel-header"><h2>Create work order</h2></div>
           <div className="p-3">
             <div className="row g-3">
               <div className="col-md-6">
                 <label className="book-label">Vehicle</label>
                 <select className="form-select" required value={form.vehicleId} onChange={(e) => setForm({ ...form, vehicleId: e.target.value })}>
                   <option value="">Select a vehicle…</option>
-                  {vehicles.filter((v) => v.status !== 'OutOfService').map((v) => (
+                  {eligibleForWorkOrder.map((v) => (
                     <option key={v.id} value={v.id}>{v.name} · {v.unitNumber} ({v.status})</option>
                   ))}
                 </select>
+                <div className="text-muted small mt-1">Units currently out on rental aren&rsquo;t shown — they&rsquo;ll be schedulable once returned.</div>
               </div>
               <div className="col-md-3">
                 <label className="book-label">Source</label>
@@ -257,10 +286,7 @@ export default function FleetMaintenance() {
               </div>
               <div className="col-md-4">
                 <label className="book-label">Technician</label>
-                <select className="form-select" value={form.technician} onChange={(e) => setForm({ ...form, technician: e.target.value })}>
-                  <option value="">Select technician…</option>
-                  {drivers.map((d) => <option key={d.id} value={d.name}>{d.name}</option>)}
-                </select>
+                <input className="form-control" list="technician-roster" placeholder="e.g. in-house tech or workshop name" value={form.technician} onChange={(e) => setForm({ ...form, technician: e.target.value })} />
               </div>
               <div className="col-md-4">
                 <label className="book-label">Workshop</label>
@@ -272,26 +298,34 @@ export default function FleetMaintenance() {
               </div>
               {Number(form.estimatedCost) > APPROVAL_THRESHOLD && (
                 <div className="col-12">
-                  <div className="dash-notice"><i className="bi bi-cash-stack me-2" />This estimate exceeds the R{APPROVAL_THRESHOLD} sign-off threshold and will require manager approval before work starts.</div>
+                  <div className="palm-alert palm-alert-info"><i className="bi bi-cash-stack" />This estimate exceeds the R{APPROVAL_THRESHOLD} sign-off threshold and will require manager approval before work starts.</div>
                 </div>
               )}
             </div>
             <div className="d-flex justify-content-end gap-2 mt-3">
-              <button type="button" className="btn btn-light" onClick={() => setShowNew(false)}>Cancel</button>
-              <button type="submit" className="btn btn-primary" disabled={busy}><i className="bi bi-hammer me-2" />{busy ? 'Creating…' : 'Create work order'}</button>
+              <button type="button" className="palm-btn palm-btn-outline" onClick={() => setShowNew(false)}>Cancel</button>
+              <button type="submit" className="palm-btn palm-btn-primary" disabled={busy}><i className="bi bi-hammer" />{busy ? 'Creating…' : 'Create work order'}</button>
             </div>
           </div>
         </form>
       )}
 
-      <div className="d-flex gap-2 flex-wrap mb-3">
-        {STATUSES.map((s) => (
-          <button key={s} type="button" className={`lux-btn ${statusFilter === s ? 'lux-btn-solid' : 'lux-btn-outline'}`} onClick={() => setStatusFilter(s)}>{s}</button>
+      <div className="palm-tabs mb-3">
+        {SOURCE_FILTERS.map((sf) => (
+          <button key={sf.key} type="button" className={`palm-tab ${sourceFilter === sf.key ? 'active' : ''}`} onClick={() => setSourceFilter(sf.key)}>
+            <i className={`bi ${sf.icon} me-1`} />{sf.label}
+          </button>
         ))}
       </div>
 
-      <div className="dash-panel">
-        <div className="dash-panel-header"><h2>Work orders ({filtered.length})</h2></div>
+      <div className="palm-tabs">
+        {STATUSES.map((s) => (
+          <button key={s} type="button" className={`palm-tab ${statusFilter === s ? 'active' : ''}`} onClick={() => setStatusFilter(s)}>{s}</button>
+        ))}
+      </div>
+
+      <div className="panel-card">
+        <div className="panel-header"><h2>Work orders ({filtered.length})</h2></div>
         {filtered.length === 0 ? (
           <div className="dash-empty"><i className="bi bi-inboxes me-2" />No work orders match the current filter.</div>
         ) : (
@@ -305,7 +339,7 @@ export default function FleetMaintenance() {
                     <span className="fw-bold">{wo.title || wo.source}</span>
                     <span className="text-muted small">· {wo.ref}</span>
                     <span className={`fleet-badge fleet-badge-${wo.status}`}>{bookingDisplay(wo.status)}</span>
-                    <span className="fleet-badge">{wo.source}</span>
+                    <span className={`wo-src wo-src-${wo.source}`}><i className={`bi ${(SOURCE_TAG[wo.source] || { icon: 'bi-tools', label: wo.source }).icon} me-1`} />{(SOURCE_TAG[wo.source] || { label: wo.source }).label}</span>
                     <span className={`sev-chip sev-${wo.priority === 'High' ? 'High' : wo.priority === 'Low' ? 'Low' : 'Medium'}`}>{wo.priority}</span>
                   </div>
                   <div className="dash-row-meta mt-1">
@@ -322,18 +356,32 @@ export default function FleetMaintenance() {
 
                   <div className="d-flex gap-2 flex-wrap mt-2 align-items-center">
                     {wo.status === 'AwaitingApproval' && (
-                      <>
-                        <button type="button" className="btn btn-sm btn-success" onClick={() => approve(wo)}><i className="bi bi-check2-circle me-1" />Approve estimate</button>
-                        <button type="button" className="btn btn-sm btn-outline-danger" onClick={() => cancelWo(wo)}><i className="bi bi-x-lg me-1" />Reject</button>
-                      </>
+                      isManager ? (
+                        <>
+                          <button type="button" className="btn btn-sm btn-success" onClick={() => approve(wo)}><i className="bi bi-check2-circle me-1" />Approve estimate</button>
+                          <button type="button" className="btn btn-sm btn-outline-danger" onClick={() => cancelWo(wo)}><i className="bi bi-x-lg me-1" />Reject</button>
+                        </>
+                      ) : (
+                        <span className="fleet-flag fleet-flag-warn"><i className="bi bi-lock me-1" />Awaiting manager sign-off</span>
+                      )
                     )}
                     {wo.status === 'Open' && (
                       <>
                         {!wo.technician && (
-                          <select className="form-select form-select-sm" style={{ width: 'auto' }} value="" onChange={(e) => e.target.value && assign(wo, e.target.value, wo.workshop)}>
-                            <option value="">Assign technician…</option>
-                            {drivers.map((d) => <option key={d.id} value={d.name}>{d.name}</option>)}
-                          </select>
+                          <div className="d-flex gap-1">
+                            <input
+                              className="form-control form-control-sm" style={{ width: 160 }} list="technician-roster"
+                              placeholder="Assign technician…" value={assignDraft[wo.id] || ''}
+                              onChange={(e) => setAssignDraft({ ...assignDraft, [wo.id]: e.target.value })}
+                            />
+                            <button
+                              type="button" className="btn btn-sm btn-outline-secondary"
+                              disabled={!assignDraft[wo.id]?.trim()}
+                              onClick={() => { assign(wo, assignDraft[wo.id].trim(), wo.workshop); setAssignDraft({ ...assignDraft, [wo.id]: '' }); }}
+                            >
+                              <i className="bi bi-check-lg" />
+                            </button>
+                          </div>
                         )}
                         <button type="button" className="btn btn-sm btn-primary" onClick={() => start(wo)} disabled={!wo.technician}><i className="bi bi-play-fill me-1" />Start work</button>
                       </>
@@ -377,6 +425,16 @@ export default function FleetMaintenance() {
                     <input type="checkbox" className="form-check-input" checked={rtc.items[item]} onChange={(e) => setRtc({ ...rtc, items: { ...rtc.items, [item]: e.target.checked } })} />
                   </div>
                 ))}
+                <div className="row g-3 mt-1">
+                  <div className="col-md-6">
+                    <label>Final repair cost (R)</label>
+                    <input type="number" min="0" className="form-control" placeholder={`Estimated ${formatPrice(rtc.current.estimatedCost)}`} value={rtc.finalCost} onChange={(e) => setRtc({ ...rtc, finalCost: e.target.value })} />
+                  </div>
+                  <div className="col-md-6">
+                    <label>Odometer at completion (km)</label>
+                    <input type="number" min="0" className="form-control" value={rtc.odometer} onChange={(e) => setRtc({ ...rtc, odometer: e.target.value })} />
+                  </div>
+                </div>
               </div>
               <div className="modal-footer">
                 <button type="button" className="btn btn-light" onClick={() => setRtc(null)}>Close</button>
@@ -386,6 +444,7 @@ export default function FleetMaintenance() {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }
