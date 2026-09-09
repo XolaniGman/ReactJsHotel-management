@@ -25,9 +25,15 @@ export default function GuestCollectionHub() {
         : { kind: 'success', label: `Ready for pick-up · ${b.pickupDate} ${b.pickupTime || ''}` };
     }
     if (b.status === 'CheckedOut') {
-      return b.guestAcknowledgedAt || b.guestSignature
-        ? { kind: 'success', label: 'Collection complete — keys handed over' }
-        : { kind: 'warn', label: 'Vehicle handed out — please review & sign your condition report' };
+      if (!(b.guestAcknowledgedAt || b.guestSignature)) {
+        return { kind: 'warn', label: 'Vehicle handed out — please review & sign your condition report' };
+      }
+      return b.guestReturning
+        ? { kind: 'info', label: 'Heading back — return in progress' }
+        : { kind: 'success', label: 'On your trip — keys handed over' };
+    }
+    if (b.status === 'PendingInspection') {
+      return { kind: 'info', label: 'Returned — being inspected at the front desk' };
     }
     return { kind: 'muted', label: bookingDisplay(b.status) };
   };
@@ -46,7 +52,10 @@ export default function GuestCollectionHub() {
       return { to: `/Fleet/Collection/${b.id}`, icon: 'bi-pen', label: 'Review & sign', cls: 'san-btn-primary' };
     }
     if (b.status === 'CheckedOut') {
-      return { to: '/Fleet/MyTrips', icon: 'bi-geo-alt', label: 'Track my trip', cls: 'san-btn-secondary' };
+      return { to: `/Fleet/Return/${b.id}`, icon: 'bi-box-arrow-in-down', label: b.guestReturning ? 'Continue return' : 'Prepare return', cls: 'san-btn-secondary' };
+    }
+    if (b.status === 'PendingInspection') {
+      return { to: `/Fleet/Return/${b.id}`, icon: 'bi-broadcast', label: 'Track return', cls: 'san-btn-secondary' };
     }
     return null;
   };

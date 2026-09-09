@@ -67,8 +67,12 @@ import FleetIncidents from './pages/FleetIncidents';
 import FleetMaintenance from './pages/FleetMaintenance';
 import FleetHandovers from './pages/FleetHandovers';
 import FleetRecords from './pages/FleetRecords';
+import FleetRentalQueue from './pages/FleetRentalQueue';
+import FleetActiveRentals from './pages/FleetActiveRentals';
+import FleetReturnFlow from './pages/FleetReturnFlow';
 import GuestCollectionFlow from './pages/GuestCollectionFlow';
 import GuestCollectionHub from './pages/GuestCollectionHub';
+import GuestReturnFlow from './pages/GuestReturnFlow';
 
 const canAccessAdmin = (user) =>
   user?.role === 'admin' && isAdminAccount(user?.email);
@@ -194,8 +198,12 @@ export default function App() {
                   <Route path="/Fleet/Incidents" element={<RequireRole roles={FLEET_ROLES}><FleetIncidents /></RequireRole>} />
                   <Route path="/Fleet/Maintenance" element={<RequireRole roles={FLEET_ROLES}><FleetMaintenance /></RequireRole>} />
                   <Route path="/Fleet/Records" element={<RequireRole roles={FLEET_ROLES}><FleetRecords /></RequireRole>} />
+                  <Route path="/Fleet/RentalQueue" element={<RequireRole roles={FLEET_ROLES}><FleetRentalQueue /></RequireRole>} />
+                  <Route path="/Fleet/ActiveRentals" element={<RequireRole roles={FLEET_ROLES}><FleetActiveRentals /></RequireRole>} />
+                  <Route path="/Fleet/ReturnFlow/:id" element={<RequireRole roles={FLEET_ROLES}><FleetReturnFlow /></RequireRole>} />
                   <Route path="/Fleet/Collection" element={<RequireAuth><GuestCollectionHub /></RequireAuth>} />
                   <Route path="/Fleet/Collection/:id" element={<RequireAuth><GuestCollectionFlow /></RequireAuth>} />
+                  <Route path="/Fleet/Return/:id" element={<RequireAuth><GuestReturnFlow /></RequireAuth>} />
 
                   <Route path="/Admin/Dashboard" element={<RequireRole roles={ADMIN_ROLES}><AdminDashboard /></RequireRole>} />
                   <Route path="/Admin/Reservations" element={<RequireRole roles={ADMIN_ROLES}><AdminReservations /></RequireRole>} />

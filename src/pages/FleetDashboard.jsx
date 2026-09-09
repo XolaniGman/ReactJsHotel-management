@@ -1,14 +1,12 @@
-import { useEffect, useState, Fragment } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useFleetLive } from '../hooks/useFleetLive';
 import {
-  confirmCarBooking,
   assignDriverToService,
   updateCarServiceStatus,
   updateServiceLivePosition,
   updateBookingLivePosition,
-  finalizePostRentalInspection,
   bookingDisplay,
 } from '../services/fleetService';
 import { rankDriversForTrip } from '../lib/fleetAlgo';
@@ -23,15 +21,12 @@ import './fleet.css';
 export default function FleetDashboard() {
   const { user } = useAuth();
   const { stats: data, vehicles, bookings, services, drivers, handovers, loading } = useFleetLive();
-  const [confirmUnit, setConfirmUnit] = useState({});
-  const [overrideNote, setOverrideNote] = useState({});
   const [dispatchMap, setDispatchMap] = useState({});
   const [notice, setNotice] = useState('');
   const [activeSection, setActiveSection] = useState('rentals');
   const [liveMapId, setLiveMapId] = useState('');
   const [liveKind, setLiveKind] = useState('');
   const [liveWatch, setLiveWatch] = useState(null);
-  const [rentalSearch, setRentalSearch] = useState('');
   const isManager = ['fleetmanager', 'admin', 'system'].includes(user?.role);
 
   useEffect(() => () => {
@@ -54,38 +49,9 @@ export default function FleetDashboard() {
     );
   }
 
-  const pendingBookings = (bookings || []).filter((b) => b.status === 'PendingConfirmation');
-  const rentalBookings = (bookings || []).filter((b) => ['Confirmed', 'CheckedOut', 'PendingInspection', 'CheckedIn'].includes(b.status));
   const pendingServices = (services || []).filter((s) => s.status === 'PendingAssignment');
   const activeTrips = (services || []).filter((s) => ['Assigned', 'EnRoute', 'Arrived'].includes(s.status));
-  const bookableVehicles = (vehicles || []).filter((v) => v.status === 'Available');
-  const visibleRentals = rentalBookings.filter((b) => {
-    const q = rentalSearch.trim().toLowerCase();
-    if (!q) return true;
-    return [b.guestName, b.ref, b.unitNumber, b.plateNumber, b.licenseNumber, b.vehicleName]
-      .filter(Boolean)
-      .join(' ')
-      .toLowerCase()
-      .includes(q);
-  });
-
-  const finalizeInspection = async (b) => {
-    setNotice('');
-    const res = await finalizePostRentalInspection(b.id, { qualifiedBy: user.name });
-    if (res?.error) return setNotice(res.error);
-    setNotice(`${b.ref}: post-rental inspection passed — vehicle ${res.vehicleStatus}. Return finalized.`);
-  };
-
-  const confirm = async (id) => {
-    const selectedVehicleId = confirmUnit[id];
-    if (!selectedVehicleId) return setNotice('Select a vehicle unit to assign before confirming.');
-    const selectedVehicle = bookableVehicles.find((v) => v.id === selectedVehicleId);
-    if (!selectedVehicle) return setNotice('That vehicle is no longer available — pick another.');
-    const unitNumber = selectedVehicle.unitNumber || selectedVehicle.plateNumber || selectedVehicle.name;
-    const res = await confirmCarBooking(id, { unitNumber, vehicleId: selectedVehicle.id, assignedBy: user.name, overrideNote: overrideNote[id] });
-    if (res?.error) return setNotice(res.error);
-    setNotice('Booking confirmed — vehicle locked for the rental window.');
-  };
+  const liveTrip = services.find((s) => s.id === liveMapId);
 
   const dispatch = async (id) => {
     const d = dispatchMap[id] || {};
@@ -152,8 +118,6 @@ export default function FleetDashboard() {
     setLiveKind('');
     setNotice('Live position stream stopped.');
   };
-
-  const liveTrip = services.find((s) => s.id === liveMapId);
 
   const liveMapMarkers = [];
   if (liveTrip?.pickupLat && liveTrip?.pickupLng) {
@@ -248,7 +212,7 @@ export default function FleetDashboard() {
 
         <div className="d-flex gap-2 mb-3">
           <button type="button" className={`lux-btn ${activeSection === 'rentals' ? 'lux-btn-solid' : 'lux-btn-outline'}`} onClick={() => setActiveSection('rentals')}>
-            <i className="bi bi-car-front me-2" />Rental confirmations ({pendingBookings.length + rentalBookings.length})
+            <i className="bi bi-car-front me-2" />Rental confirmations ({data.pendingConfirmations + data.confirmedActive})
           </button>
           <button type="button" className={`lux-btn ${activeSection === 'dispatch' ? 'lux-btn-solid' : 'lux-btn-outline'}`} onClick={() => setActiveSection('dispatch')}>
             <i className="bi bi-taxi-front me-2" />Shuttle dispatch ({pendingServices.length + activeTrips.length})
@@ -262,178 +226,30 @@ export default function FleetDashboard() {
           <>
             <div className="panel-card mb-4">
               <div className="panel-header">
-                <h2>Rental requests queue</h2>
-                <span className="panel-actions">sorted by pick-up · {pendingBookings.length} pending</span>
-              </div>
-              <div className="table-responsive">
-                <table className="task-table">
-                  <thead>
-                    <tr><th>Guest</th><th>Vehicle</th><th>Window</th><th>Est. total</th><th>Status</th><th>Action</th></tr>
-                  </thead>
-                  <tbody>
-                    {pendingBookings.length === 0 ? (
-                      <tr><td colSpan="6" className="text-center py-5 text-muted">No pending confirmations.</td></tr>
-                    ) : (
-                      pendingBookings.map((b) => (
-                        <tr key={b.id}>
-                          <td>
-                            <div className="task-name">{b.guestName}</div>
-                            <div className="task-sub">{b.licenseNumber || 'No licence on file'}</div>
-                            {b.documentReviewRequired && <div className="fleet-flag fleet-flag-warn"><i className="bi bi-file-earmark-lock me-1" />Documents need review</div>}
-                            {b.riskFlag && <div className="fleet-flag fleet-flag-danger"><i className="bi bi-shield-exclamation me-1" />High-risk — override required</div>}
-                          </td>
-                          <td>
-                            <div className="task-name">{b.vehicleName}</div>
-                            <div className="task-sub">{b.vehicleType}</div>
-                          </td>
-                          <td className="task-sub">{formatGuestDate(b.pickupDate)} {b.pickupTime}<br />→ {formatGuestDate(b.dropoffDate)} {b.dropoffTime}</td>
-                          <td>{formatPrice(b.estimatedTotal)}</td>
-                          <td><span className={`fleet-badge fleet-badge-${b.status}`}>{bookingDisplay(b.status)}</span></td>
-                          <td>
-                            <div className="d-flex flex-column gap-1">
-                              <div className="d-flex gap-1 align-items-center">
-                                <select className="form-select form-select-sm" style={{ width: 170 }} value={confirmUnit[b.id] || ''} onChange={(e) => setConfirmUnit({ ...confirmUnit, [b.id]: e.target.value })}>
-                                  <option value="">Assign unit…</option>
-                                  {bookableVehicles.map((v) => (
-                                    <option key={v.id} value={v.id}>{v.name} · {v.unitNumber || v.plateNumber}</option>
-                                  ))}
-                                </select>
-                                <button type="button" className="btn-request-start btn-request-done" onClick={() => confirm(b.id)}>Confirm</button>
-                              </div>
-                              {b.riskFlag && (
-                                <input
-                                  type="text"
-                                  className="form-control form-control-sm"
-                                  placeholder="Override reason (required, logged)"
-                                  value={overrideNote[b.id] || ''}
-                                  onChange={(e) => setOverrideNote({ ...overrideNote, [b.id]: e.target.value })}
-                                />
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            <div className="panel-card">
-              <div className="panel-header">
-                <h2>Active rentals — check-out / check-in</h2>
+                <h2><i className="bi bi-car-front me-2" />Rental confirmations &amp; handovers</h2>
                 <span className="panel-actions">
-                  <input
-                    type="search"
-                    className="form-control form-control-sm"
-                    style={{ width: 230 }}
-                    placeholder="Find by unit, plate, guest or ref…"
-                    value={rentalSearch}
-                    onChange={(e) => setRentalSearch(e.target.value)}
-                  />
-                  {visibleRentals.length} in handover flow
+                  {data.pendingConfirmations} pending · {data.confirmedActive} on rent
                 </span>
               </div>
-              <div className="table-responsive">
-                <table className="task-table">
-                  <thead>
-                    <tr><th>Guest</th><th>Vehicle / unit</th><th>Window</th><th>Status</th><th>Action</th></tr>
-                  </thead>
-                  <tbody>
-                    {visibleRentals.length === 0 ? (
-                      <tr><td colSpan="5" className="text-center py-5 text-muted">{rentalSearch.trim() ? `No rentals match "${rentalSearch}".` : 'No vehicles currently on rent.'}</td></tr>
-                    ) : (
-                      visibleRentals.map((b) => (
-                        <Fragment key={b.id}>
-                        <tr>
-                          <td>
-                            <div className="task-name">{b.guestName} {b.guestArrived && <span className={`fleet-badge ${b.guestArrived ? 'fleet-badge-SignedOff' : ''}`} style={{ marginLeft: 6 }}><i className="bi bi-person-check-fill me-1" />Arrived</span>}</div>
-                            <div className="task-sub">{b.ref}</div>
-                          </td>
-                          <td>
-                            <div className="task-name">{b.vehicleName}</div>
-                            <div className="task-sub">{b.unitNumber}</div>
-                          </td>
-                          <td className="task-sub">{formatGuestDate(b.pickupDate)} {b.pickupTime}<br />→ {formatGuestDate(b.dropoffDate)} {b.dropoffTime}</td>
-                          <td><span className={`fleet-badge fleet-badge-${b.status}`}>{bookingDisplay(b.status)}</span></td>
-                          <td>
-                            <div className="d-flex flex-column gap-1 align-items-start">
-                            {b.status === 'Confirmed' && (
-                              <Link to={`/Fleet/Handover/${b.id}?type=CheckOut`} className="btn-log" style={{ padding: '0.45rem 0.85rem', fontSize: '0.78rem' }}>
-                                <i className="bi bi-box-arrow-up-right me-1" />Check out
-                              </Link>
-                            )}
-                            {b.status === 'CheckedOut' && (
-                              <>
-                                {liveMapId === b.id && liveKind === 'booking' ? (
-                                  <button type="button" className="btn-log" style={{ padding: '0.45rem 0.85rem', fontSize: '0.78rem', background: '#8a3b2f' }} onClick={stopLive}>
-                                    <i className="bi bi-stop-circle me-1" />Stop live
-                                  </button>
-                                ) : (
-                                  <button type="button" className="btn-log" style={{ padding: '0.45rem 0.85rem', fontSize: '0.78rem', background: '#2f7d4f' }} onClick={() => goLive(b, 'booking')}>
-                                    <i className="bi bi-broadcast me-1" />Go live
-                                  </button>
-                                )}
-                                {b.liveTracking || b.livePosition ? (
-                                  <span className={`fleet-badge ${b.livePosition ? 'fleet-badge-SignedOff' : 'fleet-badge-Open'}`}>
-                                    <i className={`bi ${b.livePosition ? 'bi-geo-alt-fill' : 'bi-hourglass-split'} me-1`} />{b.livePosition ? 'Live on air' : 'Feed starting'}
-                                  </span>
-                                ) : null}
-                                <Link to={`/Fleet/Handover/${b.id}?type=CheckIn`} className="btn-log" style={{ padding: '0.45rem 0.85rem', fontSize: '0.78rem', background: '#2f7d4f', display: 'inline-flex' }}>
-                                  <i className="bi bi-box-arrow-in-down me-1" />Check in
-                                </Link>
-                              </>
-                            )}
-                            {b.status === 'PendingInspection' && (
-                              <div className="d-flex flex-column gap-1 align-items-start">
-                                <div className="d-flex gap-1 flex-wrap align-items-center">
-                                  <span className="fleet-badge fleet-badge-PendingInspection">Returned — pending inspection</span>
-                                  {b.returnTiming && (
-                                    <span className={`fleet-badge ${b.returnTiming.status === 'Late' ? 'fleet-badge-Open' : b.returnTiming.status === 'OnTime' ? 'fleet-badge-PendingInspection' : 'fleet-badge-SignedOff'}`}>
-                                      {b.returnTiming.status === 'Late' ? `Late · ${b.returnTiming.lateHours}h after grace` : b.returnTiming.status === 'OnTime' ? 'On time' : 'Early return'}
-                                    </span>
-                                  )}
-                                </div>
-                                <button type="button" className="btn-log" style={{ padding: '0.45rem 0.85rem', fontSize: '0.78rem', background: '#355f8c' }} onClick={() => finalizeInspection(b)}>
-                                  <i className="bi bi-clipboard-check me-1" />Complete post-rental inspection
-                                </button>
-                                <button type="button" className="btn btn-sm btn-outline-danger" onClick={() => { setNotice(`Report an incident for ${b.ref} after the return.`); }}>
-                                  <i className="bi bi-bug me-1" />Report incident
-                                </button>
-                              </div>
-                            )}
-                            {b.status === 'CheckedIn' && (
-                              <div className="d-flex flex-column gap-1 align-items-start">
-                                <span className="fleet-badge fleet-badge-CheckedIn">Return completed</span>
-                                <Link to={`/Fleet/Incident/Report?type=booking&id=${b.id}`} className="btn btn-sm btn-outline-danger">
-                                  <i className="bi bi-bug me-1" />Report incident
-                                </Link>
-                              </div>
-                            )}
-                            </div>
-                          </td>
-                        </tr>
-                        {liveMapId === b.id && liveKind === 'booking' && b.livePosition && (
-                          <tr>
-                            <td colSpan="5" style={{ padding: '0.25rem 0.75rem 0.75rem' }}>
-                              <FleetMap
-                                height={240}
-                                markers={[
-                                  { lat: b.livePosition.lat, lng: b.livePosition.lng, color: '#355f8c', label: `${b.vehicleName} · live`, follow: true },
-                                ]}
-                              />
-                              <div className="text-muted small mt-1">
-                                <span className="live-pulse" />Streaming {b.vehicleName} for {b.guestName} — position refreshes automatically on the guest's My Trips view.
-                              </div>
-                            </td>
-                          </tr>
-                        )}
-                        </Fragment>
-                      ))
-                    )}
-                  </tbody>
-                </table>
+              <div className="metric-grid mt-3">
+                <Link to="/Fleet/RentalQueue" className="metric-card" style={{ background: 'linear-gradient(135deg,#8a640e,#6b4d0a)', textDecoration: 'none', color: '#fff' }}>
+                  <div className="metric-content">
+                    <i className="bi bi-hourglass-split metric-icon" />
+                    <span className="metric-number">{data.pendingConfirmations}</span>
+                    <span className="metric-label">Rental requests queue →</span>
+                  </div>
+                </Link>
+                <Link to="/Fleet/ActiveRentals" className="metric-card" style={{ background: 'linear-gradient(135deg,#355f8c,#26456a)', textDecoration: 'none', color: '#fff' }}>
+                  <div className="metric-content">
+                    <i className="bi bi-car-front metric-icon" />
+                    <span className="metric-number">{data.confirmedActive}</span>
+                    <span className="metric-label">Active rentals — check-out / check-in →</span>
+                  </div>
+                </Link>
               </div>
+              <p className="text-muted small mb-0" style={{ padding: '1rem 1rem 0.25rem' }}>
+                <i className="bi bi-info-circle me-1" />Confirmation, assignment and check-out / check-in have moved to dedicated pages for faster work.
+              </p>
             </div>
           </>
         )}

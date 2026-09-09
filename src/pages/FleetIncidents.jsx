@@ -14,13 +14,13 @@ import {
 } from '../services/fleetService';
 import { formatDateTime, formatPrice, round } from '../lib/utils';
 import { accidentAdminFee } from '../lib/fleetAlgo';
+import { LIABILITIES } from '../lib/constants';
 import './guest.css';
 import './rooms.css';
 import './fleet.css';
 
 const SEVERITIES = ['All', 'High', 'Medium', 'Low'];
 const STATUS_FILTERS = ['All', 'Open', 'UnderReview', 'PendingGuestReview', 'Adjudicating', 'Suspended', 'Resolved'];
-const LIABILITIES = ['Guest fault', 'Normal wear & tear', 'Third party', 'Mechanical failure', 'Undetermined'];
 const MANAGER_ROLES = ['fleetmanager', 'admin', 'system'];
 
 export default function FleetIncidents() {

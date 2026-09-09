@@ -30,6 +30,7 @@ import {
   rentalCancellationPenalty,
   serviceCancellationPenalty,
   ageFromDob,
+  computeReturnSettlement,
 } from '../lib/fleetAlgo';
 
 const vehiclesCol = 'fleetVehicles';
@@ -1020,7 +1021,9 @@ export const recordVehicleHandover = async ({
   waiveExtraHold = false,
   waiveNote = '',
   damageOverride = null,
+  returnedAt = Date.now(),
 }) => {
+  const returnedAtMs = Number(returnedAt) || Date.now();
   const booking = await getCarBooking(bookingId);
   if (!booking) return { error: 'Booking not found.' };
 
@@ -1065,7 +1068,7 @@ export const recordVehicleHandover = async ({
     reservationId: reservationId || '',
     damageCheck: damageCheck || null,
     damageOverride: damageOverride || null,
-    createdAt: Date.now(),
+    createdAt: handoverType === 'CheckIn' ? returnedAtMs : Date.now(),
   });
 
   if (handoverType === 'CheckOut') {
@@ -1114,7 +1117,7 @@ export const recordVehicleHandover = async ({
     };
     const damageDetected = variance.damages.length > 0 || damageCheck?.flagged === true;
 
-    const returnedAt = Date.now();
+    const returnedAt = returnedAtMs;
     const late = lateReturnCharges({
       scheduledDropoff: booking.dropoffDate,
       scheduledDropoffTime: booking.dropoffTime,
@@ -1158,6 +1161,7 @@ export const recordVehicleHandover = async ({
       variance: { ...variance, damageDetected },
       returnTiming,
       pendingCharges: [...(booking.pendingCharges || []), ...pendingCharges],
+      returnProgress: { step: 'CHARGES_REVIEW', stepUpdatedAt: returnedAt },
     });
     // UC15: the vehicle stays UNAVAILABLE until the post-rental inspection is completed
     // (finalized later → Available or InMaintenance). Repairs queued from damage already
@@ -1206,15 +1210,148 @@ export const finalizePostRentalInspection = async (bookingId, { qualifiedBy = 'F
   const damageDetected = booking.variance?.damageDetected === true;
   const vehicleStatus = damageDetected ? 'InMaintenance' : 'Available';
   if (booking.vehicleId) await setVehicleStatus(booking.vehicleId, vehicleStatus);
+  const returnReceiptIssuedAt = Date.now();
   await updateDoc(doc(db, bookingsCol, bookingId), {
     status: 'CheckedIn',
     finalizedBy: qualifiedBy,
     finalizedAt: Date.now(),
     finalizedNotes: notes.trim(),
     finalizedVehicleStatus: vehicleStatus,
+    returnProgress: { step: 'COMPLETE', stepUpdatedAt: returnReceiptIssuedAt },
+    returnReceiptIssuedAt,
   });
   await logBookingHistory(bookingId, 'CheckedIn', qualifiedBy, `Post-rental inspection passed by ${qualifiedBy} — vehicle ${vehicleStatus}${notes.trim() ? ` · ${notes.trim()}` : ''}`);
-  return { ok: true, damageDetected, vehicleStatus };
+  return { ok: true, damageDetected, vehicleStatus, returnReceiptIssuedAt };
+};
+
+// One-action finalize for the staff return wizard. Composes the existing pieces —
+// recordVehicleHandover (CheckIn) creates the return record + held charges + damage
+// work order, the liability record reuses the Incident Register model, and
+// finalizePostRentalInspection flips booking + vehicle state. No parallel model.
+export const finalizeVehicleReturn = async (bookingId, {
+  unitNumber = '',
+  fuelLevel = 100,
+  mileage = 0,
+  items = [],
+  notes = '',
+  photos = [],
+  signedBy = 'Front Desk',
+  returnedAt = Date.now(),
+  returnBranchId = '',
+  liability = 'Undetermined',
+  liabilityNote = '',
+  chargeLines = [],
+}) => {
+  const booking = await getCarBooking(bookingId);
+  if (!booking) return { error: 'Booking not found.' };
+  if (booking.status !== 'CheckedOut') {
+    return { error: `This rental is ${bookingDisplay(booking.status)} — only a checked-out vehicle can be finalized for return.` };
+  }
+
+  const res = await recordVehicleHandover({
+    bookingId,
+    handoverType: 'CheckIn',
+    unitNumber: unitNumber || booking.unitNumber || '',
+    fuelLevel,
+    mileage,
+    items,
+    notes,
+    photos,
+    signedBy: signedBy || 'Front Desk',
+    reservationId: booking.reservationId || '',
+    returnBranchId: returnBranchId || booking.returnBranchId || booking.pickupBranchId,
+    returnedAt,
+  });
+  if (res?.error) return res;
+
+  // Damage → liability/charges via the SAME Incident Register data model. Damage
+  // routing (work order) and guest billing (liability) stay independent decisions.
+  const damageLines = (chargeLines || [])
+    .filter((l) => l && (l.label || '').trim() && Number(l.amount) > 0)
+    .map((l) => ({ label: String(l.label).trim(), amount: Math.round(Number(l.amount) * 100) / 100 }));
+  const damageTotal = damageLines.reduce((s, l) => s + l.amount, 0);
+  const hasDamage = res.damageDetected === true || damageLines.length > 0;
+  const openIncidents = (await listFleetIncidents())
+    .filter((i) => i.bookingId === bookingId && !['Resolved', 'Cancelled'].includes(i.status))
+    .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+
+  let incident = null;
+  let incidentId = '';
+  if (hasDamage || openIncidents.length > 0) {
+    const existing = openIncidents[0];
+    incidentId = existing?.id || '';
+    if (existing) {
+      // Resolve an existing mid-rental incident as part of this return — keep any
+      // charge lines the incident already established, else adopt the return's.
+      const baseLines = (existing.chargeLines || []).filter((l) => Number(l.amount) > 0).length
+        ? existing.chargeLines
+        : damageLines;
+      await determineIncidentLiability(incidentId, {
+        liability,
+        description: liabilityNote,
+        byName: signedBy,
+        chargeLines: baseLines,
+      });
+    } else {
+      const created = await createFleetIncident({
+        reporterUid: 'system',
+        reporterName: signedBy || 'Front Desk',
+        reporterRole: 'staff',
+        category: 'Damage at return',
+        description: [
+          liabilityNote.trim(),
+          `Damages at check-in of ${booking.vehicleName || 'vehicle'} (${booking.ref}): ${res.damageDetails?.join(', ') || damageLines.map((d) => d.label).join(', ') || 'new damage marked on the return checklist'}.`,
+        ].filter(Boolean).join(' · '),
+        bookingId,
+        vehicleId: booking.vehicleId || '',
+        vehicleName: booking.vehicleName || '',
+      });
+      if (!created?.error) {
+        incidentId = created.id;
+        await determineIncidentLiability(created.id, {
+          liability,
+          description: liabilityNote,
+          byName: signedBy,
+          chargeLines: damageLines,
+        });
+        if (res.workOrder?.id) {
+          await updateFleetIncident(created.id, {
+            patch: { linkedWorkOrderId: res.workOrder.id },
+            by: signedBy,
+            note: 'Check-in damage work order linked to return',
+          }).catch(() => {});
+        }
+      }
+    }
+    if (incidentId) {
+      const snap = await getDoc(doc(db, incidentsCol, incidentId));
+      incident = snap.exists() ? { id: incidentId, ...snap.data() } : null;
+    }
+    if (res.workOrder?.id) {
+      await updateFleetWorkOrder(res.workOrder.id, {
+        patch: { estimatedCost: damageTotal || Number(res.workOrder.estimatedCost) || 0, incidentId: incident?.id || '' },
+        by: signedBy,
+        note: 'Estimate from return damage line-items',
+      }).catch(() => {});
+    }
+  }
+
+  const fin = await finalizePostRentalInspection(bookingId, { qualifiedBy: signedBy, notes: liabilityNote });
+  if (fin?.error) return fin;
+
+  const fresh = await getCarBooking(bookingId);
+  return {
+    ok: true,
+    status: fresh?.status || 'CheckedIn',
+    vehicleStatus: fin.vehicleStatus,
+    returnReceiptIssuedAt: fin.returnReceiptIssuedAt,
+    charges: fresh?.pendingCharges || [],
+    settlement: fresh ? computeReturnSettlement(fresh) : null,
+    incident,
+    workOrder: res.workOrder || null,
+    damageDetected: hasDamage,
+    dataGap: !booking.handoverOut,
+  };
 };
 
 export const subscribeVehicleHandovers = (cb) =>
@@ -1297,6 +1434,67 @@ export const submitGuestSignature = async (bookingId, { signatureText }) => {
   });
   await logBookingHistory(bookingId, 'CheckedOut', 'Guest', 'Vehicle collection acknowledged — guest signed digitally');
   return { ok: true, signedAt: stamp };
+};
+
+// ---------------- Guest vehicle return flow ----------------
+// Mirrors the collection-flow pattern above: a persisted `returnProgress.step`
+// the guest tracker subscribes to, advanced by a guest action (`returning`), a
+// small staff-side instrumentation signal (`inspection`, from FleetHandover.jsx's
+// CheckIn path), and the existing recordVehicleHandover/finalizePostRentalInspection
+// writes (`charges`, `complete`) — no parallel data model, same booking doc.
+
+export const RETURN_STEPS = ['RETURN_LOGGED', 'INSPECTION_IN_PROGRESS', 'LIABILITY_PENDING', 'CHARGES_REVIEW', 'COMPLETE'];
+export const returnStepLabel = (step) => ({
+  RETURN_LOGGED: 'Return logged',
+  INSPECTION_IN_PROGRESS: 'Vehicle inspection',
+  LIABILITY_PENDING: 'Liability review',
+  CHARGES_REVIEW: 'Charges review',
+  COMPLETE: 'Return complete',
+}[step] || 'Return scheduled');
+
+export const markGuestReturning = async (bookingId) => {
+  const booking = await getCarBooking(bookingId);
+  if (!booking) return { error: 'Booking not found.' };
+  await updateDoc(doc(db, bookingsCol, bookingId), {
+    guestReturning: true,
+    guestReturningAt: Date.now(),
+    returnProgress: { step: 'RETURN_LOGGED', stepUpdatedAt: Date.now() },
+  });
+  await logBookingHistory(bookingId, booking.status, 'Guest', 'Guest is heading back to return the vehicle');
+  return { ok: true };
+};
+
+export const updateReturnStep = async (bookingId, step) => {
+  await updateDoc(doc(db, bookingsCol, bookingId), {
+    returnProgress: { step, stepUpdatedAt: Date.now() },
+  });
+};
+
+// Staff-guided return wizard (source of truth for the return tracker): advances the
+// shared returnProgress.step and appends an audit-trail entry, so the guest-facing
+// tracker reflects where the desk is without staff having to narrate progress.
+export const advanceReturnStep = async (bookingId, step, { by, note } = {}) => {
+  if (!RETURN_STEPS.includes(step)) return { error: `Unknown return step ${step}.` };
+  const booking = await getCarBooking(bookingId);
+  if (!booking) return { error: 'Booking not found.' };
+  const stamp = Date.now();
+  await updateDoc(doc(db, bookingsCol, bookingId), {
+    returnProgress: { step, stepUpdatedAt: stamp },
+  });
+  await logBookingHistory(bookingId, booking.status, by || 'Front Desk', note || `Return progress → ${returnStepLabel(step)}`);
+  return { ok: true, step, at: stamp };
+};
+
+export const acknowledgeReturnSummary = async (bookingId, { by } = {}) => {
+  const booking = await getCarBooking(bookingId);
+  if (!booking) return { error: 'Booking not found.' };
+  const stamp = Date.now();
+  await updateDoc(doc(db, bookingsCol, bookingId), {
+    returnAcknowledgedAt: stamp,
+    returnAcknowledgedBy: by || 'Guest',
+  });
+  await logBookingHistory(bookingId, booking.status, by || 'Guest', 'Guest acknowledged the return summary');
+  return { ok: true, acknowledgedAt: stamp };
 };
 
 // ---------------- Licence verification (check-out gate 1) ----------------

@@ -102,7 +102,7 @@ export default function GuestDashboard() {
       return { to: `/Fleet/Collection/${b.id}`, icon: 'bi-pen', label: 'Review & sign' };
     }
     if (b.status === 'CheckedOut') {
-      return { to: '/Fleet/MyTrips', icon: 'bi-geo-alt', label: 'Track' };
+      return { to: `/Fleet/Return/${b.id}`, icon: 'bi-box-arrow-in-down', label: 'Return' };
     }
     return null;
   };

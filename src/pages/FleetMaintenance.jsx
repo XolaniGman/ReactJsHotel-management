@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
   subscribeFleetWorkOrders,
@@ -49,11 +49,15 @@ const SOURCE_TAG = {
 export default function FleetMaintenance() {
   const { user } = useAuth();
   const isManager = ['fleetmanager', 'admin', 'system'].includes(user?.role);
+  const [searchParams] = useSearchParams();
   const [orders, setOrders] = useState([]);
   const [vehicles, setVehicles] = useState([]);
   const [drivers, setDrivers] = useState([]);
   const [statusFilter, setStatusFilter] = useState('All');
-  const [sourceFilter, setSourceFilter] = useState('Damage');
+  const [sourceFilter, setSourceFilter] = useState(() => {
+    const s = String(searchParams.get('src') || '');
+    return SOURCE_FILTERS.some((f) => f.key === s) ? s : 'Damage';
+  });
   const [showNew, setShowNew] = useState(false);
   const [form, setForm] = useState({ vehicleId: '', source: 'Manual', priority: 'Normal', title: '', description: '', technician: '', workshop: '', parts: '', estimatedCost: '' });
   const [rtc, setRtc] = useState(null); // { id, items: {label: bool} }

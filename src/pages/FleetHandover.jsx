@@ -8,6 +8,7 @@ import {
   getFleetVehicleForBooking,
   listFleetVehicles,
   updateHandoverStep,
+  updateReturnStep,
   verifyDriverLicence,
   overrideLicenceVerification,
   acquireCheckoutLock,
@@ -149,6 +150,9 @@ export default function FleetHandover() {
     if (type === 'CheckOut' && patch.condition) {
       updateHandoverStep(id, 'inspection').catch(() => {});
     }
+    if (type === 'CheckIn' && patch.condition) {
+      updateReturnStep(id, 'INSPECTION_IN_PROGRESS').catch(() => {});
+    }
   };
 
   const onPhoto = async (e) => {
@@ -157,6 +161,7 @@ export default function FleetHandover() {
     const data = await fileToDataUrl(file, 1000);
     setPhotos((prev) => [...prev, data]);
     if (type === 'CheckOut') updateHandoverStep(id, 'inspection').catch(() => {});
+    if (type === 'CheckIn') updateReturnStep(id, 'INSPECTION_IN_PROGRESS').catch(() => {});
   };
 
   const canSubmit =

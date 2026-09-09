@@ -288,6 +288,47 @@ export const cancellationPreview = ({ pickupDate, pickupTime = '10:00' }) => {
   };
 };
 
+// Hours-until-drop-off countdown for the guest return flow — same math as
+// cancellationPreview above, generalized to a drop-off target.
+export const dropoffPreview = ({ dropoffDate, dropoffTime = '10:00' }) => {
+  const dropoff = dropoffDate ? new Date(`${dropoffDate}T${dropoffTime || '00:00'}`) : new Date(NaN);
+  const hoursUntilDropoff = Number.isNaN(dropoff.getTime())
+    ? null
+    : (dropoff.getTime() - Date.now()) / 3600000;
+  return {
+    dropoffDate,
+    dropoffTime,
+    hoursUntilDropoff: hoursUntilDropoff == null ? null : round(hoursUntilDropoff),
+    isOverdue: hoursUntilDropoff != null && hoursUntilDropoff < 0,
+  };
+};
+
+// Nets the held deposit/authorisation hold against posted-or-pending charges to
+// tell the guest whether they're due a refund or owe an additional amount.
+// Disputed items are excluded until resolved — they're shown separately.
+export const computeReturnSettlement = (booking) => {
+  const depositHeld = Number(booking?.authorisationHoldAmount) || Number(booking?.deposit) || 0;
+  const pendingCharges = booking?.pendingCharges || [];
+  const charges = round(
+    pendingCharges
+      .filter((c) => c.status === 'Held' || c.status === 'Posted')
+      .reduce((sum, c) => sum + (Number(c.amount) || 0), 0),
+  );
+  const disputedCharges = round(
+    pendingCharges
+      .filter((c) => c.status === 'Disputed')
+      .reduce((sum, c) => sum + (Number(c.amount) || 0), 0),
+  );
+  const net = round(depositHeld - charges);
+  return {
+    depositHeld,
+    charges,
+    disputedCharges,
+    refundDue: Math.max(0, net),
+    amountDue: Math.max(0, -net),
+  };
+};
+
 // ---------------------------------------------------------------
 // Predictive analytics — moving average + linear regression
 // ---------------------------------------------------------------

@@ -139,6 +139,10 @@ export const HANDOVER_ITEMS = [
   'Audio / climate controls',
 ];
 
+// Shared liability options — the Incident Register and the return flow are two
+// entry points into the one liability/charges model.
+export const LIABILITIES = ['Guest fault', 'Normal wear & tear', 'Third party', 'Mechanical failure', 'Undetermined'];
+
 // ---------------------------------------------------------------
 // Avis-aligned fee tables & branch model (UC11–UC21)
 // ---------------------------------------------------------------

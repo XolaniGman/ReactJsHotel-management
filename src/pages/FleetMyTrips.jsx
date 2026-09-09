@@ -382,6 +382,11 @@ export default function FleetMyTrips() {
                       <i className="bi bi-credit-card me-1" />Pay {formatPrice(bookingBalanceDue(b))}
                     </button>
                   )}
+                  {!isStaff && ['CheckedOut', 'PendingInspection'].includes(b.status) && (
+                    <Link to={`/Fleet/Return/${b.id}`} className="btn btn-sm btn-outline-secondary">
+                      <i className="bi bi-box-arrow-in-down me-1" />{b.status === 'PendingInspection' ? 'Track return' : 'Prepare return'}
+                    </Link>
+                  )}
                   {!isStaff && !['Cancelled', 'PendingInspection', 'CheckedIn'].includes(b.status) && (
                     <Link to={`/Fleet/Incident/Report?type=booking&id=${b.id}`} className="btn btn-sm btn-outline-primary">
                       <i className="bi bi-bug me-1" />Report incident

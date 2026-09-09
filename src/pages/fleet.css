@@ -813,6 +813,11 @@
 .fleet-badge-SignedOff { background: #edf8f1; color: #2f7d4f; }
 .fleet-badge-Cancelled { background: #e9e9ef; color: #6b6b7b; }
 
+/* Staff return wizard: rows where the return condition differs from pick-up get
+   a red-tinted highlight so nothing is left to manual spot-checking. */
+.return-changed-row { background: #fff1f1 !important; }
+.return-changed-row td { border-color: #f3d1cc !important; }
+
 .evidence-thumb {
   width: 64px;
   height: 64px;
