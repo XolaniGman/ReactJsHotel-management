@@ -1,9 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
   cancelCarBooking,
   modifyCarBooking,
+  requestModificationHold,
+  releaseModificationHold,
+  confirmModificationRequest,
+  expireStalePendingModification,
   cancelServiceRequest,
   bookingDisplay,
   listFleetVehicles,
@@ -15,7 +19,7 @@ import {
   updateBookingLivePosition,
   recordBookingPayment,
 } from '../services/fleetService';
-import { cancellationPreview, rentalCancellationPenalty, serviceCancellationPenalty } from '../lib/fleetAlgo';
+import { cancellationSettlement, modificationCostDifference, serviceCancellationPenalty } from '../lib/fleetAlgo';
 import FleetMap from '../components/FleetMap';
 import StripeCheckoutModal from '../components/StripeCheckoutModal';
 import { formatPrice, formatGuestDate, formatDateTime, statusTone, todayISO } from '../lib/utils';
@@ -43,9 +47,21 @@ export default function FleetMyTrips() {
   const [liveBookingId, setLiveBookingId] = useState('');
   const [historyOpenId, setHistoryOpenId] = useState('');
   const [payModal, setPayModal] = useState(null);
+  const [cancelConfirm, setCancelConfirm] = useState(null);
+  const [modifyError, setModifyError] = useState('');
+  const [modifyAlternatives, setModifyAlternatives] = useState([]);
+  const [modifySubmitting, setModifySubmitting] = useState(false);
+  const [nowTick, setNowTick] = useState(Date.now());
+  const checkedStaleRef = useRef(new Set());
 
   const bookingBalanceDue = (b) =>
     Math.max(0, Number(b.estimatedTotal || 0) + Number(b.finalCharges || 0) - Number(b.paidAmount || 0));
+
+  const hoursUntilPickup = (b) => {
+    const pickup = new Date(`${b.pickupDate}T${b.pickupTime || '00:00'}`);
+    return Number.isNaN(pickup.getTime()) ? 0 : (pickup.getTime() - Date.now()) / 3600000;
+  };
+  const pickupHasPassed = (b) => hoursUntilPickup(b) <= 0;
 
   const confirmStripePayment = async () => {
     const res = await recordBookingPayment(payModal.bookingId, {
@@ -103,15 +119,46 @@ export default function FleetMyTrips() {
     return subscribeCarBookings((all) => setBookings(isStaff ? all : all.filter((b) => b.guestUid === user.uid)));
   }, [user?.uid, isStaff]);
 
-  const doCancel = async (id) => {
-    if (!window.confirm('Cancel this rental booking? A cancellation fee may apply — see the policy shown below the booking.')) return;
+  // Self-healing fallback: a modification left pending past its own pickup time
+  // reverts to the original confirmed values (see fleetService.expireStalePendingModification) —
+  // there's no backend to run this as a scheduled job, so it's checked opportunistically here.
+  useEffect(() => {
+    if (isStaff) return;
+    bookings
+      .filter((b) => b.status === 'ModifyRequested' && !checkedStaleRef.current.has(b.id))
+      .forEach((b) => {
+        checkedStaleRef.current.add(b.id);
+        expireStalePendingModification(b.id).catch(() => {});
+      });
+  }, [bookings, isStaff]);
+
+  const activeEdit = bookings.find((b) => b.id === editing?.id);
+
+  // 1s tick powers the visible modification-hold countdown while its modal is open.
+  useEffect(() => {
+    if (!activeEdit?.modificationHold) return undefined;
+    const interval = setInterval(() => setNowTick(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, [activeEdit?.modificationHold]);
+
+  const openCancelConfirm = (b) => {
+    const settlement = cancellationSettlement({
+      pickupDate: b.pickupDate,
+      pickupTime: b.pickupTime,
+      depositAmount: b.authorisationHoldAmount || b.deposit || 0,
+    });
     setError('');
     setNotice('');
+    setCancelConfirm({ id: b.id, ref: b.ref, vehicleName: b.vehicleName, hasStay: !!b.reservationId, settlement });
+  };
+
+  const doConfirmCancel = async () => {
+    const id = cancelConfirm.id;
     setBusyId(id);
     const result = await cancelCarBooking(id, { byName: user.name });
     setBusyId('');
-    if (result?.error) return setError(result.error);
-    setNotice(result.fee > 0 ? `Booking cancelled (${result.tier}). A cancellation fee of ${formatPrice(result.fee)} applies.` : 'Booking cancelled — no fee applies.');
+    if (result?.error) { setError(result.error); setCancelConfirm(null); return; }
+    setCancelConfirm({ ...cancelConfirm, done: true, fee: result.fee, refund: result.refund, tier: result.tier });
     await load();
   };
 
@@ -127,21 +174,58 @@ export default function FleetMyTrips() {
     await load();
   };
 
+  const closeModify = async () => {
+    if (activeEdit?.modificationHold) await releaseModificationHold(editing.id).catch(() => {});
+    setEditing(null);
+    setModifyError('');
+    setModifyAlternatives([]);
+  };
+
   const doModify = async (e) => {
     e.preventDefault();
-    setError('');
+    setModifyError('');
+    setModifyAlternatives([]);
     setNotice('');
-    const result = await modifyCarBooking(editing.id, {
+    if (activeEdit?.status === 'PendingConfirmation') {
+      // Not yet confirmed at all — no staff sign-off to preserve, so this can still
+      // apply immediately (matches modifyCarBooking's existing carve-out).
+      const result = await modifyCarBooking(editing.id, {
+        pickupDate: editing.pickupDate,
+        dropoffDate: editing.dropoffDate,
+        pickupTime: editing.pickupTime,
+        dropoffTime: editing.dropoffTime,
+        vehicleId: editing.vehicleId,
+      }, user.name);
+      if (result?.error) return setModifyError(result.error);
+      setNotice('Booking updated.');
+      setEditing(null);
+      return;
+    }
+    setModifySubmitting(true);
+    const result = await requestModificationHold(editing.id, {
       pickupDate: editing.pickupDate,
       dropoffDate: editing.dropoffDate,
       pickupTime: editing.pickupTime,
       dropoffTime: editing.dropoffTime,
       vehicleId: editing.vehicleId,
-    }, user.name);
-    if (result?.error) return setError(result.error);
-    setNotice(editing.vehicleId ? 'Booking modified. A confirmation of the change has been sent.' : 'Booking dates updated.');
+    });
+    setModifySubmitting(false);
+    if (result?.error) {
+      setModifyError(result.error);
+      setModifyAlternatives(result.alternatives || []);
+      return;
+    }
+    // activeEdit.modificationHold now updates reactively via the live subscription.
+  };
+
+  const doConfirmModification = async () => {
+    setModifySubmitting(true);
+    setModifyError('');
+    const result = await confirmModificationRequest(editing.id, { by: user.name });
+    setModifySubmitting(false);
+    if (result?.error) return setModifyError(result.error);
+    setNotice('Modification requested — pending front desk confirmation. You\'ll see it update here once confirmed.');
     setEditing(null);
-    await load();
   };
 
   const reviewCharge = async (bookingId, item, action) => {
@@ -159,8 +243,6 @@ export default function FleetMyTrips() {
     setNotice(action === 'accept' ? 'You accepted the liability determination.' : 'You disputed the liability determination — it has been sent to the Fleet Manager for adjudication.');
     await load();
   };
-
-  const activeEdit = bookings.find((b) => b.id === editing?.id);
 
   const dueBack = (b) => {
     if (!b.dropoffDate) return null;
@@ -262,28 +344,53 @@ export default function FleetMyTrips() {
                       )}
                     </div>
                   )}
-                  {!isStaff && !['CheckedOut', 'PendingInspection', 'CheckedIn', 'Cancelled'].includes(b.status) && (() => {
-                    const p = cancellationPreview({ pickupDate: b.pickupDate, pickupTime: b.pickupTime });
-                    const label = p.hoursUntilPickup > 24
-                      ? `${Math.floor(p.hoursUntilPickup / 24)}d ${p.hoursUntilPickup % 24}h to pickup`
-                      : `${Math.round(p.hoursUntilPickup)}h to pickup`;
-                    const penalty = rentalCancellationPenalty({
-                      paidAmount: b.paidAmount || 0,
-                      dailyRate: b.days ? b.basePrice / b.days : 0,
-                      hoursUntilPickup: p.hoursUntilPickup,
-                      isDayOf: new Date().toDateString() === new Date(`${b.pickupDate}T00:00:00`).toDateString(),
+                  {!isStaff && !['CheckedOut', 'PendingInspection', 'CheckedIn', 'Cancelled'].includes(b.status) && !pickupHasPassed(b) && (() => {
+                    const hrs = hoursUntilPickup(b);
+                    const label = hrs > 24 ? `${Math.floor(hrs / 24)}d ${Math.round(hrs % 24)}h to pickup` : `${Math.round(hrs)}h to pickup`;
+                    const settlement = cancellationSettlement({
+                      pickupDate: b.pickupDate,
+                      pickupTime: b.pickupTime,
+                      depositAmount: b.authorisationHoldAmount || b.deposit || 0,
                     });
                     return (
                       <div className="dash-row-meta">
                         <span>
-                          <i className={`bi ${penalty.fee === 0 ? 'bi-check-circle' : 'bi-exclamation-triangle'} me-1`} />
-                          {penalty.fee === 0
-                            ? `Free cancellation · ${label}`
-                            : `Cancellation fee up to ${formatPrice(penalty.fee)} (${penalty.tier}) · ${label}`}
+                          <i className={`bi ${settlement.forfeitAmount === 0 ? 'bi-check-circle' : 'bi-exclamation-triangle'} me-1`} />
+                          {settlement.forfeitAmount === 0
+                            ? `Free cancellation · full deposit refunded · ${label}`
+                            : `Cancelling now forfeits ${formatPrice(settlement.forfeitAmount)} of your deposit (${settlement.tier}) · ${label}`}
                         </span>
                       </div>
                     );
                   })()}
+                  {!isStaff && pickupHasPassed(b) && ['PendingConfirmation', 'Confirmed'].includes(b.status) && (
+                    <div className="dash-row-meta">
+                      <span className="text-muted"><i className="bi bi-lock me-1" />This booking can no longer be changed online — please see the front desk.</span>
+                    </div>
+                  )}
+                  {!isStaff && b.status === 'ModifyRequested' && (
+                    <div className="lost-alert lost-alert-warning mt-2" style={{ padding: '0.55rem 0.75rem', fontSize: '0.85rem' }}>
+                      <i className="bi bi-hourglass-split me-2" />Modification requested — pending front desk confirmation.
+                      <div className="mt-1 small">
+                        {b.pendingPickupDate && b.pendingPickupDate !== b.pickupDate && (
+                          <div>Pick-up: {formatGuestDate(b.pickupDate)} {b.pickupTime} → <strong>{formatGuestDate(b.pendingPickupDate)} {b.pendingPickupTime}</strong></div>
+                        )}
+                        {b.pendingDropoffDate && b.pendingDropoffDate !== b.dropoffDate && (
+                          <div>Return: {formatGuestDate(b.dropoffDate)} {b.dropoffTime} → <strong>{formatGuestDate(b.pendingDropoffDate)} {b.pendingDropoffTime}</strong></div>
+                        )}
+                        {b.pendingVehicleName && b.pendingVehicleId !== b.vehicleId && (
+                          <div>Vehicle: {b.vehicleName} → <strong>{b.pendingVehicleName}</strong></div>
+                        )}
+                        {b.pendingCostDifference && (b.pendingCostDifference.chargeAmount > 0 || b.pendingCostDifference.refundAmount > 0) && (
+                          <div>
+                            {b.pendingCostDifference.chargeAmount > 0
+                              ? `Additional charge if confirmed: ${formatPrice(b.pendingCostDifference.chargeAmount)}`
+                              : `Partial refund if confirmed: ${formatPrice(b.pendingCostDifference.refundAmount)}`}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                   {!isStaff && (b.pendingCharges || []).length > 0 && (
                     <div className="mt-2">
                       {b.pendingCharges.map((item) => (
@@ -392,13 +499,13 @@ export default function FleetMyTrips() {
                       <i className="bi bi-bug me-1" />Report incident
                     </Link>
                   )}
-                  {!isStaff && ['PendingConfirmation', 'Confirmed'].includes(b.status) && (
+                  {!isStaff && ['PendingConfirmation', 'Confirmed'].includes(b.status) && !pickupHasPassed(b) && (
                     <button type="button" className="btn btn-sm btn-outline-secondary" onClick={() => setEditing({ id: b.id, vehicleId: b.vehicleId, pickupDate: b.pickupDate, dropoffDate: b.dropoffDate, pickupTime: b.pickupTime, dropoffTime: b.dropoffTime })}>
                       <i className="bi bi-pencil me-1" />Modify
                     </button>
                   )}
-                  {!isStaff && !['CheckedOut', 'PendingInspection', 'CheckedIn', 'Cancelled'].includes(b.status) && (
-                    <button type="button" className="btn btn-sm btn-outline-danger" disabled={busyId === b.id} onClick={() => doCancel(b.id)}>
+                  {!isStaff && !['CheckedOut', 'PendingInspection', 'CheckedIn', 'Cancelled'].includes(b.status) && !pickupHasPassed(b) && (
+                    <button type="button" className="btn btn-sm btn-outline-danger" disabled={busyId === b.id} onClick={() => openCancelConfirm(b)}>
                       <i className="bi bi-x-lg me-1" />Cancel
                     </button>
                   )}
@@ -504,52 +611,178 @@ export default function FleetMyTrips() {
         </div>
       )}
 
-      {editing && activeEdit && (
+      {editing && activeEdit && (() => {
+        const hold = activeEdit.modificationHold;
+        const remainingMs = hold ? hold.expiresAt - nowTick : null;
+        const holdExpired = hold && remainingMs <= 0;
+        const remainingLabel = remainingMs != null && remainingMs > 0
+          ? `${Math.floor(remainingMs / 60000)}:${String(Math.floor((remainingMs % 60000) / 1000)).padStart(2, '0')}`
+          : '0:00';
+        const currentQuote = { estimatedTotal: activeEdit.estimatedTotal };
+        const diff = hold && !holdExpired ? modificationCostDifference({ oldQuote: currentQuote, newQuote: hold.quote }) : null;
+
+        return (
+          <div className="modal d-block" tabIndex="-1" style={{ background: 'rgba(15,20,35,0.6)' }}>
+            <div className="modal-dialog modal-lg">
+              <div className="modal-content">
+                <div className="modal-header">
+                  <h5 className="modal-title">Modify booking · {activeEdit.ref}</h5>
+                  <button type="button" className="btn-close" onClick={closeModify} />
+                </div>
+
+                {!hold && !holdExpired && (
+                  <form onSubmit={doModify}>
+                    <div className="modal-body">
+                      {modifyError && <div className="lost-alert lost-alert-danger mb-3">{modifyError}</div>}
+                      <div className="row g-3">
+                        <div className="col-md-6">
+                          <label className="book-label">Pick-up date</label>
+                          <input type="date" className="form-control" min={todayISO()} value={editing.pickupDate} onChange={(e) => setEditing({ ...editing, pickupDate: e.target.value })} />
+                        </div>
+                        <div className="col-md-6">
+                          <label className="book-label">Pick-up time</label>
+                          <input type="time" className="form-control" value={editing.pickupTime} onChange={(e) => setEditing({ ...editing, pickupTime: e.target.value })} />
+                        </div>
+                        <div className="col-md-6">
+                          <label className="book-label">Drop-off date</label>
+                          <input type="date" className="form-control" min={editing.pickupDate} value={editing.dropoffDate} onChange={(e) => setEditing({ ...editing, dropoffDate: e.target.value })} />
+                        </div>
+                        <div className="col-md-6">
+                          <label className="book-label">Drop-off time</label>
+                          <input type="time" className="form-control" value={editing.dropoffTime} onChange={(e) => setEditing({ ...editing, dropoffTime: e.target.value })} />
+                        </div>
+                        <div className="col-md-6">
+                          <label className="book-label">Vehicle</label>
+                          <select className="form-select" value={editing.vehicleId} onChange={(e) => setEditing({ ...editing, vehicleId: e.target.value })}>
+                            {vehicles.filter((v) => v.status === 'Available' || v.id === activeEdit.vehicleId).map((v) => (
+                              <option key={v.id} value={v.id}>{v.name} · {formatPrice(v.pricePerDay)}/day</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                      {modifyAlternatives.length > 0 && (
+                        <div className="mt-3">
+                          <div className="book-label mb-2">That vehicle isn't available — try one of these instead:</div>
+                          <div className="d-flex flex-wrap gap-2">
+                            {modifyAlternatives.map((v) => (
+                              <button type="button" key={v.id} className="btn btn-sm btn-outline-secondary" onClick={() => { setEditing({ ...editing, vehicleId: v.id }); setModifyAlternatives([]); setModifyError(''); }}>
+                                {v.name} · {formatPrice(v.pricePerDay)}/day
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {activeEdit.status === 'PendingConfirmation' ? (
+                        <div className="dash-notice mt-3" style={{ margin: '1rem 0 0' }}>
+                          <i className="bi bi-info-circle me-2" />This booking hasn't been confirmed yet, so changes apply right away.
+                        </div>
+                      ) : (
+                        <div className="dash-notice mt-3" style={{ margin: '1rem 0 0' }}>
+                          <i className="bi bi-info-circle me-2" />We'll hold your new vehicle/dates for 5 minutes while you confirm — the change is then re-confirmed by the front desk before it's final.
+                        </div>
+                      )}
+                    </div>
+                    <div className="modal-footer">
+                      <button type="button" className="btn btn-light" onClick={closeModify}>Close</button>
+                      <button type="submit" className="btn btn-primary" disabled={modifySubmitting}>
+                        <i className="bi bi-check-lg me-1" />{modifySubmitting ? 'Checking…' : activeEdit.status === 'PendingConfirmation' ? 'Confirm change' : 'Check availability & hold'}
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+                {hold && !holdExpired && (
+                  <>
+                    <div className="modal-body">
+                      {modifyError && <div className="lost-alert lost-alert-danger mb-3">{modifyError}</div>}
+                      <div className="lost-alert lost-alert-warning d-flex align-items-center justify-content-between mb-3">
+                        <span><i className="bi bi-clock-history me-2" />Hold expires in</span>
+                        <strong style={{ fontVariantNumeric: 'tabular-nums', fontSize: '1.2rem' }}>{remainingLabel}</strong>
+                      </div>
+                      <div className="fleet-quote-row"><span className="text-muted">Vehicle</span><strong>{hold.vehicleName}</strong></div>
+                      <div className="fleet-quote-row mt-1"><span className="text-muted">Pick-up</span><strong>{formatGuestDate(hold.pickupDate)} {hold.pickupTime}</strong></div>
+                      <div className="fleet-quote-row mt-1"><span className="text-muted">Return</span><strong>{formatGuestDate(hold.dropoffDate)} {hold.dropoffTime}</strong></div>
+                      <div className="fleet-quote-row mt-1"><span className="text-muted">New total</span><strong>{formatPrice(hold.quote.estimatedTotal)}</strong></div>
+                      {diff && (diff.chargeAmount > 0 || diff.refundAmount > 0) ? (
+                        <div className="fleet-quote-total mt-2">
+                          <span>{diff.chargeAmount > 0 ? 'Additional charge' : 'Partial refund'}</span>
+                          <span className="amount">{formatPrice(diff.chargeAmount > 0 ? diff.chargeAmount : diff.refundAmount)}</span>
+                        </div>
+                      ) : (
+                        <div className="task-sub mt-2">No price change.</div>
+                      )}
+                    </div>
+                    <div className="modal-footer">
+                      <button type="button" className="btn btn-light" onClick={closeModify}>Cancel hold</button>
+                      <button type="button" className="btn btn-primary" disabled={modifySubmitting} onClick={doConfirmModification}>
+                        <i className="bi bi-check-lg me-1" />{modifySubmitting ? 'Submitting…' : 'Confirm modification'}
+                      </button>
+                    </div>
+                  </>
+                )}
+
+                {holdExpired && (
+                  <>
+                    <div className="modal-body">
+                      <div className="lost-alert lost-alert-danger mb-0">
+                        <i className="bi bi-exclamation-triangle me-2" />Your hold expired — please check availability again.
+                      </div>
+                    </div>
+                    <div className="modal-footer">
+                      <button type="button" className="btn btn-light" onClick={closeModify}>Close</button>
+                      <button type="button" className="btn btn-primary" onClick={async () => { await releaseModificationHold(editing.id).catch(() => {}); setModifyError(''); }}>
+                        <i className="bi bi-arrow-repeat me-1" />Check availability again
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {cancelConfirm && (
         <div className="modal d-block" tabIndex="-1" style={{ background: 'rgba(15,20,35,0.6)' }}>
-          <div className="modal-dialog modal-lg">
-            <form className="modal-content" onSubmit={doModify}>
+          <div className="modal-dialog">
+            <div className="modal-content">
               <div className="modal-header">
-                <h5 className="modal-title">Modify booking · {activeEdit.ref}</h5>
-                <button type="button" className="btn-close" onClick={() => setEditing(null)} />
+                <h5 className="modal-title">Cancel booking · {cancelConfirm.ref}</h5>
+                <button type="button" className="btn-close" onClick={() => setCancelConfirm(null)} />
               </div>
               <div className="modal-body">
-                <div className="row g-3">
-                  <div className="col-md-6">
-                    <label className="book-label">Pick-up date</label>
-                    <input type="date" className="form-control" min={todayISO()} value={editing.pickupDate} onChange={(e) => setEditing({ ...editing, pickupDate: e.target.value })} />
+                {!cancelConfirm.done ? (
+                  <>
+                    <div className="fleet-quote-row"><span className="text-muted">Deposit held</span><strong>{formatPrice(cancelConfirm.settlement.depositAmount)}</strong></div>
+                    <div className="fleet-quote-row mt-1"><span className="text-muted">Cancellation tier</span><strong>{cancelConfirm.settlement.tier}</strong></div>
+                    <div className="fleet-quote-row mt-1"><span className="text-muted">Forfeited</span><strong>{formatPrice(cancelConfirm.settlement.forfeitAmount)}</strong></div>
+                    <div className="fleet-quote-total mt-2"><span>Refund amount</span><span className="amount">{formatPrice(cancelConfirm.settlement.refundAmount)}</span></div>
+                    <div className="dash-notice mt-3" style={{ margin: '1rem 0 0' }}>
+                      <i className="bi bi-exclamation-triangle me-2" />A cancellation fee may apply — see the policy above. This cannot be undone.
+                    </div>
+                  </>
+                ) : (
+                  <div className="lost-alert lost-alert-success mb-0">
+                    <i className="bi bi-check-circle me-2" />Booking cancelled.{' '}
+                    {cancelConfirm.refund > 0
+                      ? `Refund of ${formatPrice(cancelConfirm.refund)} ${cancelConfirm.hasStay ? 'has been posted to your Room Ledger' : 'will be processed by the front desk'}.`
+                      : 'No refund applies for this cancellation window.'}
                   </div>
-                  <div className="col-md-6">
-                    <label className="book-label">Pick-up time</label>
-                    <input type="time" className="form-control" value={editing.pickupTime} onChange={(e) => setEditing({ ...editing, pickupTime: e.target.value })} />
-                  </div>
-                  <div className="col-md-6">
-                    <label className="book-label">Drop-off date</label>
-                    <input type="date" className="form-control" min={editing.pickupDate} value={editing.dropoffDate} onChange={(e) => setEditing({ ...editing, dropoffDate: e.target.value })} />
-                  </div>
-                  <div className="col-md-6">
-                    <label className="book-label">Drop-off time</label>
-                    <input type="time" className="form-control" value={editing.dropoffTime} onChange={(e) => setEditing({ ...editing, dropoffTime: e.target.value })} />
-                  </div>
-                  <div className="col-md-6">
-                    <label className="book-label">Vehicle</label>
-                    <select className="form-select" value={editing.vehicleId} onChange={(e) => setEditing({ ...editing, vehicleId: e.target.value })}>
-                      {vehicles.filter((v) => v.status === 'Available' || v.id === activeEdit.vehicleId).map((v) => (
-                        <option key={v.id} value={v.id}>{v.name} · {formatPrice(v.pricePerDay)}/day</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-                <div className="dash-notice mt-3" style={{ margin: '1rem 0 0' }}>
-                  <i className="bi bi-info-circle me-2" />Modifications are re-quoted and any change is re-confirmed by the front desk. A fee may apply if a change reduces your rental window.
-                </div>
+                )}
               </div>
               <div className="modal-footer">
-                <button type="button" className="btn btn-light" onClick={() => setEditing(null)}>Close</button>
-                <button type="submit" className="btn btn-primary">
-                  <i className="bi bi-check-lg me-1" />Confirm change
-                </button>
+                {!cancelConfirm.done ? (
+                  <>
+                    <button type="button" className="btn btn-light" onClick={() => setCancelConfirm(null)}>Keep booking</button>
+                    <button type="button" className="btn btn-danger" disabled={busyId === cancelConfirm.id} onClick={doConfirmCancel}>
+                      <i className="bi bi-x-lg me-1" />Confirm cancellation
+                    </button>
+                  </>
+                ) : (
+                  <button type="button" className="btn btn-primary" onClick={() => setCancelConfirm(null)}>Done</button>
+                )}
               </div>
-            </form>
+            </div>
           </div>
         </div>
       )}

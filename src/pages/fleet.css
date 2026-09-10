@@ -103,6 +103,11 @@
   color: #5b51a8;
 }
 
+.fleet-badge-OnHold {
+  background: #fff6db;
+  color: #8a640e;
+}
+
 .fleet-pill-maintenance,
 .fleet-badge-InMaintenance {
   background: #fff6db;

@@ -483,6 +483,49 @@ export const rentalCancellationPenalty = ({ paidAmount = 0, dailyRate = 0, hours
   };
 };
 
+// Guest self-service cancellation settlement — percentage of the held deposit,
+// not the amount paid. Single source of truth for both the guest's live preview
+// and the authoritative write in cancelCarBooking.
+export const cancellationSettlement = ({ pickupDate, pickupTime = '10:00', depositAmount = 0 }) => {
+  const pickup = pickupDate ? new Date(`${pickupDate}T${pickupTime || '00:00'}`) : new Date(NaN);
+  const hoursUntilPickup = Number.isNaN(pickup.getTime()) ? 0 : (pickup.getTime() - Date.now()) / 3600000;
+  const deposit = Number(depositAmount) || 0;
+  let forfeitPct = 1;
+  let tier = 'Under 24h';
+  if (hoursUntilPickup >= 48) {
+    forfeitPct = 0;
+    tier = '48h+ before pickup';
+  } else if (hoursUntilPickup >= 24) {
+    forfeitPct = 0.5;
+    tier = '24–48h before pickup';
+  }
+  const forfeitAmount = round(deposit * forfeitPct);
+  const refundAmount = round(deposit - forfeitAmount);
+  return {
+    hoursUntilPickup: round(hoursUntilPickup),
+    tier,
+    forfeitPct,
+    forfeitAmount,
+    refundAmount,
+    depositAmount: deposit,
+  };
+};
+
+// Cost difference for a modification re-quote — one shared function so the
+// guest's live preview and the authoritative confirm write never disagree.
+export const modificationCostDifference = ({ oldQuote, newQuote }) => {
+  const oldTotal = Number(oldQuote?.estimatedTotal) || 0;
+  const newTotal = Number(newQuote?.estimatedTotal) || 0;
+  const delta = round(newTotal - oldTotal);
+  return {
+    oldTotal,
+    newTotal,
+    delta,
+    chargeAmount: Math.max(0, delta),
+    refundAmount: Math.max(0, -delta),
+  };
+};
+
 // UC21 policy branched from UC17 (chauffeur/transfer bookings).
 export const serviceCancellationPenalty = ({ confirmedBookingAmount = 0, hoursUntilPickup = 0 }) => {
   const amount = Number(confirmedBookingAmount) || 0;

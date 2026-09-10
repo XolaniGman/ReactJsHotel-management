@@ -84,7 +84,11 @@ export const STOCK_ACTIONS = ['StockIn', 'IssuedToRoom', 'ReturnedToStorage', 'A
 export const VEHICLE_TYPES = ['Hatchback', 'Sedan', 'SUV', 'Luxury', 'Shuttle'];
 export const VEHICLE_CATEGORIES = ['Compact', 'Sedan', 'SUV', 'Luxury', 'Shuttle'];
 export const VEHICLE_TRANSMISSIONS = ['Automatic', 'Manual'];
-export const VEHICLE_STATUSES = ['Available', 'Reserved', 'Rented', 'InMaintenance', 'OutOfService', 'PendingInspection'];
+export const VEHICLE_STATUSES = ['Available', 'Reserved', 'Rented', 'OnHold', 'InMaintenance', 'OutOfService', 'PendingInspection'];
+
+// How long a candidate vehicle stays exclusively held for a guest mid-modification
+// before the hold auto-releases (guest must confirm within this window).
+export const MODIFICATION_HOLD_MINUTES = 5;
 
 export const CAR_BOOKING_STATUSES = [
   'PendingConfirmation',

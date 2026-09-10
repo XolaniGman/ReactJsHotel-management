@@ -14,7 +14,7 @@ import {
 import { db } from '../lib/firebase';
 import { addBillItem } from './billService';
 import { nightsBetween, round, todayISO, addDaysISO } from '../lib/utils';
-import { DEPOSIT_AMOUNT, HIGH_RISK_EXTRA_HOLD, LATE_RETURN_GRACE_HOURS, MIN_DRIVING_AGE } from '../lib/constants';
+import { DEPOSIT_AMOUNT, HIGH_RISK_EXTRA_HOLD, LATE_RETURN_GRACE_HOURS, MIN_DRIVING_AGE, MODIFICATION_HOLD_MINUTES } from '../lib/constants';
 import {
   dynamicRateMultiplier,
   additionalDriverFee,
@@ -27,10 +27,11 @@ import {
   lateReturnCharges,
   fuelVarianceCharge,
   accidentAdminFee,
-  rentalCancellationPenalty,
   serviceCancellationPenalty,
   ageFromDob,
   computeReturnSettlement,
+  cancellationSettlement,
+  modificationCostDifference,
 } from '../lib/fleetAlgo';
 
 const vehiclesCol = 'fleetVehicles';
@@ -665,38 +666,212 @@ export const updateCarBookingStatus = async (id, status, by) => {
   await logBookingHistory(id, status, by, `Status updated to ${status}`);
 };
 
+// Guest self-service cancellation — a percentage of the held deposit, using
+// cancellationSettlement as the single source of truth also used for the
+// guest's live preview before they confirm. Immediate, no staff gate.
 export const cancelCarBooking = async (id, { byName }) => {
   const booking = await getCarBooking(id);
   if (!booking) return { error: 'Booking not found.' };
-  const pickup = new Date(`${booking.pickupDate}T${booking.pickupTime || '00:00'}`);
-  const hoursUntilPickup = Number.isNaN(pickup.getTime()) ? 0 : (pickup.getTime() - Date.now()) / 3600000;
-  const isDayOf = !Number.isNaN(pickup.getTime()) && new Date().toDateString() === pickup.toDateString();
-  const penalty = rentalCancellationPenalty({
-    paidAmount: booking.paidAmount || 0,
-    dailyRate: booking.days ? round(booking.basePrice / booking.days) : 0,
-    hoursUntilPickup,
-    isDayOf,
+  const settlement = cancellationSettlement({
+    pickupDate: booking.pickupDate,
+    pickupTime: booking.pickupTime,
+    depositAmount: booking.authorisationHoldAmount || booking.deposit || 0,
   });
-  await updateDoc(doc(db, bookingsCol, id), {
+  const patch = {
     status: 'Cancelled',
-    cancelFee: penalty.fee,
+    cancelFee: settlement.forfeitAmount,
+    refundAmount: settlement.refundAmount,
     cancelledAt: Date.now(),
-  });
+  };
+  // Cancelling supersedes any in-flight modification request — don't leave an
+  // orphaned pending record or a vehicle stuck OnHold for a booking that's gone.
+  if (booking.status === 'ModifyRequested' || booking.modificationHold) {
+    patch.pendingPickupDate = null;
+    patch.pendingDropoffDate = null;
+    patch.pendingPickupTime = null;
+    patch.pendingDropoffTime = null;
+    patch.pendingVehicleId = null;
+    patch.pendingVehicleName = null;
+    patch.pendingQuote = null;
+    patch.pendingCostDifference = null;
+    patch.modifyRequestedAt = null;
+    patch.modificationHold = null;
+    if (booking.modificationHold?.vehicleId) {
+      await setVehicleStatus(booking.modificationHold.vehicleId, 'Available').catch(() => {});
+    }
+  }
+  await updateDoc(doc(db, bookingsCol, id), patch);
   if (booking.vehicleId && booking.status !== 'CheckedOut' && booking.status !== 'CheckedIn' && booking.status !== 'PendingInspection') {
     await setVehicleStatus(booking.vehicleId, 'Available');
+  }
+  if (settlement.refundAmount > 0 && booking.reservationId) {
+    await addBillItem(booking.reservationId, {
+      type: 'Refund',
+      description: `Refund — cancelled rental (${booking.vehicleName || 'vehicle'}, ${settlement.tier})`,
+      qty: 1,
+      unitPrice: -settlement.refundAmount,
+    }).catch(() => {});
   }
   await logBookingHistory(
     id,
     'Cancelled',
     byName || 'Guest',
-    `Cancelled (${penalty.tier}) — ${penalty.note || penalty.tier}, fee of R${penalty.fee} applied`,
+    `Cancelled (${settlement.tier}) — R${settlement.forfeitAmount} forfeited, R${settlement.refundAmount} refunded`,
   );
-  return { fee: penalty.fee, tier: penalty.tier };
+  return { fee: settlement.forfeitAmount, refund: settlement.refundAmount, tier: settlement.tier };
+};
+
+// ---------------- Guest-initiated modification (temporary hold → staged request) ----------------
+// A Confirmed booking's live fields (pickupDate/dropoffDate/vehicleId/price) are
+// never touched by a guest modification until staff approve — see the separate
+// admin confirmation-queue work. These three functions write/consume a
+// `modificationHold` (the live 5-minute decision window) and `pending*` fields
+// (the staged request once confirmed), leaving the confirmed booking untouched.
+
+export const requestModificationHold = async (bookingId, { vehicleId, pickupDate, dropoffDate, pickupTime, dropoffTime, addOns } = {}) => {
+  const booking = await getCarBooking(bookingId);
+  if (!booking) return { error: 'Booking not found.' };
+  if (booking.status !== 'Confirmed') return { error: `This booking is ${bookingDisplay(booking.status)} — only a Confirmed booking can be modified this way.` };
+
+  const targetVehicleId = vehicleId || booking.vehicleId;
+  const changingVehicle = targetVehicleId !== booking.vehicleId;
+
+  return runTransaction(db, async (tx) => {
+    let vehicle = booking;
+    if (changingVehicle) {
+      const vRef = doc(db, vehiclesCol, targetVehicleId);
+      const vSnap = await tx.get(vRef);
+      if (!vSnap.exists()) return { error: 'Vehicle not found.' };
+      vehicle = { id: targetVehicleId, ...vSnap.data() };
+      if (vehicle.status !== 'Available') {
+        const allVehicles = await listFleetVehicles();
+        const alternatives = allVehicles
+          .filter((v) => v.status === 'Available' && v.id !== targetVehicleId && v.category === vehicle.category)
+          .sort((a, b) => Math.abs((a.pricePerDay || 0) - (vehicle.pricePerDay || 0)) - Math.abs((b.pricePerDay || 0) - (vehicle.pricePerDay || 0)))
+          .slice(0, 4);
+        return { error: `${vehicle.name} is no longer available.`, alternatives };
+      }
+    }
+
+    const quote = computeRentalQuote({
+      vehicle,
+      pickupDate: pickupDate || booking.pickupDate,
+      dropoffDate: dropoffDate || booking.dropoffDate,
+      addOns: addOns || booking.addOns || [],
+    });
+
+    const expiresAt = Date.now() + MODIFICATION_HOLD_MINUTES * 60000;
+    const modificationHold = {
+      vehicleId: targetVehicleId,
+      vehicleName: vehicle.name,
+      pickupDate: pickupDate || booking.pickupDate,
+      dropoffDate: dropoffDate || booking.dropoffDate,
+      pickupTime: pickupTime || booking.pickupTime,
+      dropoffTime: dropoffTime || booking.dropoffTime,
+      quote,
+      expiresAt,
+    };
+
+    if (changingVehicle) {
+      tx.update(doc(db, vehiclesCol, targetVehicleId), { status: 'OnHold', heldForBooking: bookingId, holdExpiresAt: expiresAt });
+    }
+    tx.update(doc(db, bookingsCol, bookingId), { modificationHold });
+    return { ok: true, modificationHold };
+  }).catch((err) => ({ error: err?.message || 'Could not place a hold — please retry.' }));
+};
+
+export const releaseModificationHold = async (bookingId) => {
+  const booking = await getCarBooking(bookingId);
+  if (!booking?.modificationHold) return { ok: true };
+  const heldVehicleId = booking.modificationHold.vehicleId;
+  await updateDoc(doc(db, bookingsCol, bookingId), { modificationHold: null });
+  if (heldVehicleId && heldVehicleId !== booking.vehicleId) {
+    const vehicle = await getFleetVehicle(heldVehicleId);
+    if (vehicle?.heldForBooking === bookingId) {
+      await setVehicleStatus(heldVehicleId, 'Available');
+      await updateDoc(doc(db, vehiclesCol, heldVehicleId), { heldForBooking: '', holdExpiresAt: null }).catch(() => {});
+    }
+  }
+  return { ok: true };
+};
+
+export const confirmModificationRequest = async (bookingId, { by } = {}) => {
+  const booking = await getCarBooking(bookingId);
+  if (!booking) return { error: 'Booking not found.' };
+  const hold = booking.modificationHold;
+  if (!hold || Date.now() > hold.expiresAt) {
+    await releaseModificationHold(bookingId);
+    return { error: 'Your hold expired — please check availability again.' };
+  }
+  const currentQuote = computeRentalQuote({
+    vehicle: booking,
+    pickupDate: booking.pickupDate,
+    dropoffDate: booking.dropoffDate,
+    addOns: booking.addOns || [],
+  });
+  const diff = modificationCostDifference({ oldQuote: currentQuote, newQuote: hold.quote });
+  const stamp = Date.now();
+  await updateDoc(doc(db, bookingsCol, bookingId), {
+    status: 'ModifyRequested',
+    pendingPickupDate: hold.pickupDate,
+    pendingDropoffDate: hold.dropoffDate,
+    pendingPickupTime: hold.pickupTime,
+    pendingDropoffTime: hold.dropoffTime,
+    pendingVehicleId: hold.vehicleId,
+    pendingVehicleName: hold.vehicleName,
+    pendingQuote: hold.quote,
+    pendingCostDifference: diff,
+    modifyRequestedAt: stamp,
+    modificationHold: null,
+  });
+  await logBookingHistory(
+    bookingId,
+    'ModifyRequested',
+    by || 'Guest',
+    `Modification requested — ${hold.vehicleName} · ${hold.pickupDate} → ${hold.dropoffDate} · ${diff.delta >= 0 ? `+R${diff.chargeAmount}` : `-R${diff.refundAmount}`} (pending front desk confirmation)`,
+  );
+  return { ok: true, costDifference: diff };
+};
+
+// If pickup passes while a modification is still awaiting staff sign-off, don't
+// leave the guest stuck — revert to the original confirmed values (which were
+// never touched) and release any held vehicle. Called opportunistically from the
+// guest's own booking view, same lazy-check idiom as the checkout lock staleness
+// check — there's no backend to run this as a real scheduled job.
+export const expireStalePendingModification = async (bookingId) => {
+  const booking = await getCarBooking(bookingId);
+  if (!booking || booking.status !== 'ModifyRequested') return { ok: true };
+  const pickup = new Date(`${booking.pickupDate}T${booking.pickupTime || '00:00'}`);
+  if (Number.isNaN(pickup.getTime()) || pickup.getTime() > Date.now()) return { ok: true };
+  if (booking.pendingVehicleId && booking.pendingVehicleId !== booking.vehicleId) {
+    const vehicle = await getFleetVehicle(booking.pendingVehicleId);
+    if (vehicle?.heldForBooking === bookingId) {
+      await setVehicleStatus(booking.pendingVehicleId, 'Available');
+      await updateDoc(doc(db, vehiclesCol, booking.pendingVehicleId), { heldForBooking: '', holdExpiresAt: null }).catch(() => {});
+    }
+  }
+  await updateDoc(doc(db, bookingsCol, bookingId), {
+    status: 'Confirmed',
+    pendingPickupDate: null,
+    pendingDropoffDate: null,
+    pendingPickupTime: null,
+    pendingDropoffTime: null,
+    pendingVehicleId: null,
+    pendingVehicleName: null,
+    pendingQuote: null,
+    pendingCostDifference: null,
+    modifyRequestedAt: null,
+  });
+  await logBookingHistory(bookingId, 'Confirmed', 'System', 'Modification request expired unactioned before pickup — please see the front desk.');
+  return { ok: true, expired: true };
 };
 
 export const modifyCarBooking = async (id, fields, byName) => {
   const booking = await getCarBooking(id);
   if (!booking) return { error: 'Booking not found.' };
+  if (booking.status === 'Confirmed') {
+    return { error: 'This booking is Confirmed — use requestModificationHold / confirmModificationRequest so the change can be staged for front desk review.' };
+  }
   const data = { ...fields };
   if (fields.vehicleId && fields.vehicleId !== booking.vehicleId) {
     const vehicle = await getFleetVehicle(fields.vehicleId);
