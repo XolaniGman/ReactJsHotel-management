@@ -18,6 +18,9 @@ import './housekeeping.css';
 import './guest.css';
 import './fleet.css';
 
+const DEFAULT_VEHICLE_IMG =
+  'https://images.unsplash.com/photo-1542362567-b07e54358753?auto=format&fit=crop&w=600&q=80';
+
 export default function FleetDashboard() {
   const { user } = useAuth();
   const { stats: data, vehicles, bookings, services, drivers, handovers, loading } = useFleetLive();
@@ -135,36 +138,18 @@ export default function FleetDashboard() {
             <div className="maint-kicker">Fleet Operations · Front Desk &amp; Dispatch</div>
             <h1 className="maint-title">Fleet Ops Dashboard</h1>
           </div>
-          <div className="d-flex gap-2">
-            <Link to="/Fleet/Incidents" className="btn-log" style={{ background: '#7a251b' }}>
-              <i className="bi bi-bug me-2" />Incidents {data.openIncidents}
-            </Link>
-            {isManager && (
-              <Link to="/Fleet/Maintenance" className="btn-log" style={{ background: '#433c7d' }}>
-                <i className="bi bi-wrench-adjustable me-2" />Maintenance
-              </Link>
-            )}
-            <Link to="/Fleet/Charges" className="btn-log" style={{ background: '#355f8c' }}>
-              <i className="bi bi-credit-card me-2" />Charges
-            </Link>
-            {isManager && (
-              <Link to="/Fleet/Manager" className="btn-log" style={{ background: '#2f7d4f' }}>
-                <i className="bi bi-graph-up me-2" />Reports
-              </Link>
-            )}
-          </div>
         </div>
 
         {notice && <div className="lost-alert lost-alert-success mb-3"><i className="bi bi-check-circle me-2" />{notice}</div>}
 
         <div className="metric-grid">
           {[
-            { n: data.pendingConfirmations, label: 'Pending Confirmation', icon: 'bi-hourglass-split', bg: 'linear-gradient(135deg,#8a640e,#6b4d0a)' },
-            { n: data.confirmedActive, label: 'Confirmed / On Rental', icon: 'bi-car-front', bg: 'linear-gradient(135deg,#355f8c,#26456a)' },
-            { n: data.pendingServices + data.activeTrips, label: 'Shuttle Trips', icon: 'bi-taxi-front', bg: 'linear-gradient(135deg,#5b51a8,#433c7d)' },
-            { n: `${data.availableDrivers}/${data.drivers.length}`, label: 'Drivers Available', icon: 'bi-person-badge', bg: 'linear-gradient(135deg,#2f7d4f,#1f5c38)' },
-            { n: data.openIncidents, label: 'Open Incidents', icon: 'bi-bug', bg: 'linear-gradient(135deg,#a33a2d,#7a251b)' },
-            { n: data.openWorkOrders, label: 'Work Orders Open', icon: 'bi-wrench-adjustable', bg: 'linear-gradient(135deg,#433c7d,#2d2e66)' },
+            { n: data.pendingConfirmations, label: 'Pending Confirmation', icon: 'bi-hourglass-split', bg: "url('https://images.unsplash.com/photo-1502877338535-766e1452684a?auto=format&fit=crop&w=800&q=80') center/cover no-repeat" },
+            { n: data.confirmedActive, label: 'Confirmed / On Rental', icon: 'bi-car-front', bg: "url('https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=800&q=80') center/cover no-repeat" },
+            { n: data.pendingServices + data.activeTrips, label: 'Shuttle Trips', icon: 'bi-taxi-front', bg: "url('https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?auto=format&fit=crop&w=800&q=80') center/cover no-repeat" },
+            { n: `${data.availableDrivers}/${data.drivers.length}`, label: 'Drivers Available', icon: 'bi-person-badge', bg: "url('https://images.unsplash.com/photo-1494976388531-d1058494cdd8?auto=format&fit=crop&w=800&q=80') center/cover no-repeat" },
+            { n: data.openIncidents, label: 'Open Incidents', icon: 'bi-bug', bg: "url('https://images.unsplash.com/photo-1552519507-da3b142c6e3d?auto=format&fit=crop&w=800&q=80') center/cover no-repeat" },
+            { n: data.openWorkOrders, label: 'Work Orders Open', icon: 'bi-wrench-adjustable', bg: "url('https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=800&q=80') center/cover no-repeat" },
           ].map((m) => (
             <div className="metric-card" key={m.label} style={{ background: m.bg }}>
               <div className="metric-content">
@@ -199,12 +184,15 @@ export default function FleetDashboard() {
           </div>
           <div style={{ padding: '1rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(190px,1fr))', gap: '0.65rem' }}>
             {vehicles.map((v) => (
-              <div className="d-flex align-items-center justify-content-between gap-2 border rounded-3 p-2" key={v.id}>
-                <div className="text-truncate">
-                  <div className="task-name text-truncate">{v.name}</div>
-                  <div className="task-sub">{v.unitNumber || v.plateNumber} · {v.type}</div>
+              <div className="fleet-status-row" key={v.id}>
+                <img className="fleet-status-row-img" src={v.image || DEFAULT_VEHICLE_IMG} alt={v.name} loading="lazy" />
+                <div className="fleet-status-row-content">
+                  <div className="text-truncate">
+                    <div className="task-name text-truncate">{v.name}</div>
+                    <div className="task-sub">{v.unitNumber || v.plateNumber} · {v.type}</div>
+                  </div>
+                  <span className={`fleet-badge fleet-badge-${v.status}`}>{v.status}</span>
                 </div>
-                <span className={`fleet-badge fleet-badge-${v.status}`}>{v.status}</span>
               </div>
             ))}
           </div>

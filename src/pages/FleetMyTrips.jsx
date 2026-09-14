@@ -290,7 +290,7 @@ export default function FleetMyTrips() {
       </div>
 
       {tab === 'rentals' && (
-        <div className="dash-panel">
+        <div className="dash-panel trip-list">
           <div className="dash-panel-header"><h2>{isStaff ? 'All rental bookings' : 'My rental bookings'}</h2></div>
           {bookings.length === 0 ? (
             <div className="dash-empty"><i className="bi bi-car-front me-2" />No rental bookings yet.</div>
@@ -300,7 +300,11 @@ export default function FleetMyTrips() {
               const isCompleted = b.status === 'CheckedIn';
               return (
               <div key={b.id} className="fleet-row">
-                <span className="fleet-thumb"><i className="bi bi-car-front" /></span>
+                {b.vehicleImage ? (
+                  <img className="fleet-thumb-img" src={b.vehicleImage} alt={b.vehicleName} loading="lazy" />
+                ) : (
+                  <span className="fleet-thumb"><i className="bi bi-car-front" /></span>
+                )}
                 <div className="flex-grow-1">
                   <div className="dash-row-title">{b.vehicleName} <span className="text-muted">· {b.ref}</span></div>
                   <div className="dash-row-meta">
@@ -532,7 +536,7 @@ export default function FleetMyTrips() {
       )}
 
       {tab === 'shuttles' && (
-        <div className="dash-panel">
+        <div className="dash-panel trip-list">
           <div className="dash-panel-header"><h2>{isStaff ? 'All shuttle & car services' : 'My shuttle & car services'}</h2></div>
           {services.length === 0 ? (
             <div className="dash-empty"><i className="bi bi-taxi-front me-2" />No shuttle trips yet.</div>

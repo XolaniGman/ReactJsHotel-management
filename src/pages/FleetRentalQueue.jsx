@@ -60,10 +60,10 @@ export default function FleetRentalQueue() {
 
         <div className="metric-grid">
           {[
-            { n: pendingBookings.length, label: 'Waiting confirmation', icon: 'bi-hourglass-split', bg: 'linear-gradient(135deg,#8a640e,#6b4d0a)' },
-            { n: bookableVehicles.length, label: 'Available units', icon: 'bi-car-front', bg: 'linear-gradient(135deg,#2f7d4f,#1f5c38)' },
-            { n: pendingBookings.filter((b) => b.documentReviewRequired).length, label: 'Docs to review', icon: 'bi-file-earmark-lock', bg: 'linear-gradient(135deg,#433c7d,#2d2e66)' },
-            { n: pendingBookings.filter((b) => b.riskFlag).length, label: 'High-risk to override', icon: 'bi-shield-exclamation', bg: 'linear-gradient(135deg,#a33a2d,#7a251b)' },
+            { n: pendingBookings.length, label: 'Waiting confirmation', icon: 'bi-hourglass-split', bg: "url('https://images.unsplash.com/photo-1502877338535-766e1452684a?auto=format&fit=crop&w=800&q=80') center/cover no-repeat" },
+            { n: bookableVehicles.length, label: 'Available units', icon: 'bi-car-front', bg: "url('https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=800&q=80') center/cover no-repeat" },
+            { n: pendingBookings.filter((b) => b.documentReviewRequired).length, label: 'Docs to review', icon: 'bi-file-earmark-lock', bg: "url('https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?auto=format&fit=crop&w=800&q=80') center/cover no-repeat" },
+            { n: pendingBookings.filter((b) => b.riskFlag).length, label: 'High-risk to override', icon: 'bi-shield-exclamation', bg: "url('https://images.unsplash.com/photo-1494976388531-d1058494cdd8?auto=format&fit=crop&w=800&q=80') center/cover no-repeat" },
           ].map((m) => (
             <div className="metric-card" key={m.label} style={{ background: m.bg }}>
               <div className="metric-content">

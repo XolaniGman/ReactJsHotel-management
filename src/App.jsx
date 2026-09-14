@@ -77,9 +77,19 @@ import GuestReturnFlow from './pages/GuestReturnFlow';
 const canAccessAdmin = (user) =>
   user?.role === 'admin' && isAdminAccount(user?.email);
 
+function AuthGateLoading() {
+  return (
+    <div className="text-center text-muted py-5">
+      <i className="bi bi-arrow-repeat me-2" />Loading…
+    </div>
+  );
+}
+
 function RequireAuth({ children }) {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
   const location = useLocation();
+
+  if (loading) return <AuthGateLoading />;
 
   if (!user) {
     return <Navigate to="/Account/Login" replace state={{ from: location.pathname }} />;
@@ -89,8 +99,10 @@ function RequireAuth({ children }) {
 }
 
 function RequireRole({ roles = [], children }) {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
   const location = useLocation();
+
+  if (loading) return <AuthGateLoading />;
 
   if (!user) {
     return <Navigate to="/Account/Login" replace state={{ from: location.pathname }} />;

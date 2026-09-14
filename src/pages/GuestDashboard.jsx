@@ -6,6 +6,7 @@ import { listBillsForGuest } from '../services/billService';
 import { listTableReservations, updateTableReservationStatus } from '../services/restaurantService';
 import { subscribeCarBookings, collectionStepLabel, bookingDisplay } from '../services/fleetService';
 import { formatPrice, formatGuestDate, todayISO, nightsBetween } from '../lib/utils';
+import DashboardVoiceAssistant from '../components/DashboardVoiceAssistant';
 import './palm.css';
 
 const STAY_STATUS = {
@@ -39,6 +40,9 @@ export default function GuestDashboard() {
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState('');
   const [checkingIn, setCheckingIn] = useState('');
+  const [chatPosition, setChatPosition] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
 
   const load = async () => {
     const [r, b, tr] = await Promise.all([
@@ -157,65 +161,59 @@ export default function GuestDashboard() {
             <Link to="/Fleet/MyTrips" className="palm-btn palm-btn-light">
               <i className="bi bi-car-front" />View Rental Details
             </Link>
+            <Link to="/Fleet/Collection" className="palm-btn palm-btn-light">
+              <i className="bi bi-box-arrow-right" />Fetch the Car
+            </Link>
             <Link to="/Amenities/Request" className="palm-hero-link">Request Amenities →</Link>
           </div>
         </div>
       </div>
 
-      {notice && <div className="palm-card"><div className="palm-card-body pt-3"><i className="bi bi-check-circle me-2 text-success" />{notice}</div></div>}
+      <div className="palm-content">
+        {notice && <div className="palm-card"><div className="palm-card-body pt-3"><i className="bi bi-check-circle me-2 text-success" />{notice}</div></div>}
 
-      <div className="palm-grid">
-        <div>
-          {activeRes ? (
-            <div className="palm-card">
-              <div className="palm-card-header">
-                <span className="palm-card-title">Room {activeRes.roomNumber} · {activeRes.roomType}</span>
-                <span className={`palm-status-chip ${STAY_STATUS[activeRes.status] || 'info'}`}>{activeRes.status}</span>
-              </div>
-              <div className="palm-card-body">
-                <div className="palm-card-sub">Reservation {activeRes.bookingRef}</div>
-                <div className="palm-stay-meta-grid">
-                  <div className="palm-stay-meta-item">
-                    <div className="label">Check-in</div>
-                    <div className="value">{formatGuestDate(activeRes.checkInDate)}</div>
+        <div className="palm-grid">
+          {/* Your Accommodations Card */}
+          <div className="palm-card">
+            <div className="palm-card-header">
+              <span className="palm-card-title">Your Accommodations</span>
+              <span className="palm-card-sub" style={{ marginRight: 'auto', marginLeft: '1rem' }}>Plan your upcoming visit or link an existing confirmation</span>
+            </div>
+            <div className="palm-card-body">
+              {activeRes ? (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1.2rem' }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '1.2rem', marginBottom: '1rem' }}>
+                      <div style={{ padding: '0.8rem', background: 'rgba(193, 100, 47, 0.05)', borderRadius: '12px' }}>
+                        <div style={{ fontSize: '0.65rem', textTransform: 'uppercase', color: 'var(--palm-muted)', marginBottom: '0.4rem', fontWeight: '700', letterSpacing: '0.03em' }}>CHECK-IN</div>
+                        <div style={{ fontWeight: '800', fontSize: '0.95rem', color: 'var(--palm-text)' }}>{formatGuestDate(activeRes.checkInDate).split(' ')[0]}</div>
+                      </div>
+                      <div style={{ padding: '0.8rem', background: 'rgba(193, 100, 47, 0.05)', borderRadius: '12px' }}>
+                        <div style={{ fontSize: '0.65rem', textTransform: 'uppercase', color: 'var(--palm-muted)', marginBottom: '0.4rem', fontWeight: '700', letterSpacing: '0.03em' }}>CHECK-OUT</div>
+                        <div style={{ fontWeight: '800', fontSize: '0.95rem', color: 'var(--palm-text)' }}>{formatGuestDate(activeRes.checkOutDate).split(' ')[0]}</div>
+                      </div>
+                    </div>
+                    <span className={`palm-status-chip ${STAY_STATUS[activeRes.status] || 'info'}`} style={{ marginRight: '0.5rem' }}>{activeRes.status}</span>
                   </div>
-                  <div className="palm-stay-meta-item">
-                    <div className="label">Check-out</div>
-                    <div className="value">{formatGuestDate(activeRes.checkOutDate)}</div>
-                  </div>
-                  <div className="palm-stay-meta-item">
-                    <div className="label">Nights</div>
-                    <div className="value">{nightsBetween(activeRes.checkInDate, activeRes.checkOutDate)}</div>
-                  </div>
-                  <div className="palm-stay-meta-item">
-                    <div className="label">Current Folio</div>
-                    <div className="value">{latestBill ? formatPrice(latestBill.balanceDue) : '—'}</div>
-                  </div>
-                </div>
-                <div className="palm-stay-actions">
-                  <Link to="/Housekeeping/RequestRoomCleaning" className="palm-btn palm-btn-outline">
-                    <i className="bi bi-stars" />Request Room Cleaning
-                  </Link>
-                  <Link to="/Amenities/Request" className="palm-btn palm-btn-outline">
-                    <i className="bi bi-star" />Suite Amenities
+                  <Link to="/Reservations/Create" className="palm-btn palm-btn-primary" style={{ whiteSpace: 'nowrap', marginTop: '0.2rem' }}>
+                    <i className="bi bi-calendar-check" />Check Availability
                   </Link>
                 </div>
-                <Link to={`/Reservations/Details/${activeRes.id}`} className="palm-card-link">View Full Stay Details →</Link>
-              </div>
+              ) : (
+                <div style={{ textAlign: 'center', paddingTop: '0.5rem' }}>
+                  <p className="text-muted small mb-3">You don&apos;t have an active stay yet.</p>
+                  <Link to="/Reservations/Create" className="palm-btn palm-btn-primary">
+                    <i className="bi bi-calendar-plus" />Book a Stay
+                  </Link>
+                </div>
+              )}
             </div>
-          ) : (
-            <div className="palm-card">
-              <div className="palm-card-body pt-4 text-center">
-                <p className="text-muted mb-3">You don&apos;t have an active or upcoming stay yet.</p>
-                <Link to="/Reservations/Create" className="palm-btn palm-btn-primary"><i className="bi bi-calendar-plus" />Book a Stay</Link>
-              </div>
-            </div>
-          )}
+          </div>
 
           <div className="palm-card">
             <div className="palm-card-header">
-              <span className="palm-card-title">Restaurant &amp; Table Reservations</span>
-              <Link to="/Restaurant/Reserve" className="palm-btn palm-btn-outline" style={{ padding: '0.4rem 0.75rem', fontSize: '0.76rem' }}>
+              <span className="palm-card-title">Restaurant & Table Reservations</span>
+              <Link to="/Restaurant/Reserve" className="palm-btn palm-btn-outline" style={{ padding: '0.5rem 0.9rem', fontSize: '0.76rem', marginTop: '0rem' }}>
                 <i className="bi bi-plus-lg" />Reserve a Table
               </Link>
             </div>
@@ -266,7 +264,7 @@ export default function GuestDashboard() {
             <div className="palm-card-header">
               <span className="palm-card-title">Vehicle Collection</span>
               {carRows.length > 0 && (
-                <Link to="/Fleet/Collection" className="palm-btn palm-btn-outline" style={{ padding: '0.4rem 0.75rem', fontSize: '0.76rem' }}>
+                <Link to="/Fleet/Collection" className="palm-btn palm-btn-outline" style={{ padding: '0.5rem 0.9rem', fontSize: '0.76rem', marginTop: '0rem' }}>
                   <i className="bi bi-box-arrow-right" />Fetch the Car
                 </Link>
               )}
@@ -338,7 +336,7 @@ export default function GuestDashboard() {
                   </div>
                 </div>
               ))}
-              <Link to="/Events" className="palm-btn palm-btn-primary w-100 justify-content-center mt-3">
+              <Link to="/Events" className="palm-btn palm-btn-primary" style={{ width: '100%', justifyContent: 'center', marginTop: '1rem' }}>
                 <i className="bi bi-calendar-event" />Explore Today&apos;s Event Calendar
               </Link>
             </div>
@@ -349,14 +347,19 @@ export default function GuestDashboard() {
             <div className="palm-card-body">
               {latestBill ? (
                 <>
-                  <div className="palm-folio-total">{formatPrice(latestBill.balanceDue)}</div>
-                  <div className="palm-folio-sub">Estimated when you check out · Room {latestBill.roomNumber}</div>
-                  {folioLines.map((l, i) => (
-                    <div className="palm-folio-line" key={i}>
-                      <span>{l.description}</span>
-                      <span>{formatPrice(l.amount)}</span>
-                    </div>
-                  ))}
+                  <div style={{ background: 'linear-gradient(135deg, rgba(193, 100, 47, 0.08) 0%, rgba(193, 100, 47, 0.04) 100%)', padding: '1rem', borderRadius: '12px', marginBottom: '1rem' }}>
+                    <div className="palm-folio-sub">Estimated when you check out</div>
+                    <div className="palm-folio-total" style={{ marginBottom: '0.2rem' }}>{formatPrice(latestBill.balanceDue)}</div>
+                    <div className="palm-folio-sub">Room {latestBill.roomNumber}</div>
+                  </div>
+                  <div style={{ marginBottom: '0.8rem' }}>
+                    {folioLines.slice(0, 3).map((l, i) => (
+                      <div className="palm-folio-line" key={i}>
+                        <span style={{ fontSize: '0.8rem' }}>{l.description}</span>
+                        <span style={{ fontSize: '0.8rem', fontWeight: '700' }}>{formatPrice(l.amount)}</span>
+                      </div>
+                    ))}
+                  </div>
                   <div className="palm-folio-actions">
                     <Link to={`/Payments/Bill/${latestBill.id}`} className="palm-btn palm-btn-outline"><i className="bi bi-receipt" />View Bill</Link>
                     <Link to={`/Payments/Bill/${latestBill.id}`} className="palm-btn palm-btn-primary"><i className="bi bi-credit-card" />Express Pay &amp; Tip</Link>
@@ -369,6 +372,7 @@ export default function GuestDashboard() {
           </div>
         </div>
       </div>
+      <DashboardVoiceAssistant />
     </div>
   );
 }

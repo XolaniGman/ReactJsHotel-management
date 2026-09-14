@@ -91,11 +91,12 @@
   font-size: 1.85rem;
   font-weight: 900;
   line-height: 1;
+  color: #fff;
 }
 
 .maint-dash .metric-label {
   font-size: 0.78rem;
-  color: rgba(255, 255, 255, 0.82);
+  color: #fff;
   font-weight: 800;
 }
 
@@ -173,6 +174,34 @@
 
 .maint-dash .task-table tr:last-child td {
   border-bottom: 0;
+}
+
+.maint-dash .task-table-spaced {
+  border-collapse: separate;
+  border-spacing: 0 0.85rem;
+}
+
+.maint-dash .task-table-spaced th {
+  border-bottom: none;
+}
+
+.maint-dash .task-table-spaced td {
+  border-top: 1px solid #eee6da;
+  border-bottom: 1px solid #eee6da;
+  background: #fbf7f0;
+}
+
+.maint-dash .task-table-spaced td:first-child {
+  border-left: 1px solid #eee6da;
+  border-top-left-radius: 10px;
+  border-bottom-left-radius: 10px;
+}
+
+.maint-dash .task-table-spaced td:last-child {
+  border-right: 1px solid #eee6da;
+  border-top-right-radius: 10px;
+  border-bottom-right-radius: 10px;
+  background: transparent;
 }
 
 .maint-dash .task-name {

@@ -358,6 +358,12 @@ useEffect(() => {
               <button type="button" className="palm-btn palm-btn-light" onClick={() => changeTab('reports')}>
                 <i className="bi bi-bar-chart" />View Reports
               </button>
+              <Link to="/Fleet/RentalQueue" className="palm-btn palm-btn-light">
+                <i className="bi bi-hourglass-split" />Rental Requests Queue
+              </Link>
+              <Link to="/Fleet/ActiveRentals" className="palm-btn palm-btn-light">
+                <i className="bi bi-arrow-left-right" />Active Rentals — Check-out / Check-in
+              </Link>
               <Link to="/Fleet/Incidents" className="palm-hero-link">Review incidents →</Link>
             </div>
           </div>
@@ -390,10 +396,10 @@ useEffect(() => {
           <>
             <div className="metric-grid">
               {[
-                { n: `${reports.utilization}%`, label: 'Fleet Utilization', icon: 'bi-bar-chart', bg: 'linear-gradient(135deg,#355f8c,#26456a)' },
-                { n: formatPrice(reports.totalRevenue), label: 'Rental + Shuttle Revenue', icon: 'bi-currency-rand', bg: 'linear-gradient(135deg,#2f7d4f,#1f5c38)' },
-                { n: reports.activeBookings, label: 'Active Bookings', icon: 'bi-car-front', bg: 'linear-gradient(135deg,#5b51a8,#433c7d)' },
-                { n: reports.serviceDueSoon.length, label: 'Service Due ≤ 7 days', icon: 'bi-tools', bg: 'linear-gradient(135deg,#8a640e,#6b4d0a)' },
+                { n: `${reports.utilization}%`, label: 'Fleet Utilization', icon: 'bi-bar-chart', bg: "url('https://images.unsplash.com/photo-1502877338535-766e1452684a?auto=format&fit=crop&w=800&q=80') center/cover no-repeat" },
+                { n: formatPrice(reports.totalRevenue), label: 'Rental + Shuttle Revenue', icon: 'bi-currency-rand', bg: "url('https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=800&q=80') center/cover no-repeat" },
+                { n: reports.activeBookings, label: 'Active Bookings', icon: 'bi-car-front', bg: "url('https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?auto=format&fit=crop&w=800&q=80') center/cover no-repeat" },
+                { n: reports.serviceDueSoon.length, label: 'Service Due ≤ 7 days', icon: 'bi-tools', bg: "url('https://images.unsplash.com/photo-1494976388531-d1058494cdd8?auto=format&fit=crop&w=800&q=80') center/cover no-repeat" },
               ].map((m) => (
                 <div className="metric-card" key={m.label} style={{ background: m.bg }}>
                   <div className="metric-content">
@@ -511,10 +517,10 @@ useEffect(() => {
           <>
             <div className="metric-grid">
               {[
-                { n: prediction ? String(prediction.forecastSum) : '—', label: 'Forecast requests · next 7 days', icon: 'bi-graph-up-arrow', bg: 'linear-gradient(135deg,#5b51a8,#433c7d)' },
-                { n: prediction ? (prediction.slope >= 0.02 ? 'Rising' : prediction.slope <= -0.02 ? 'Falling' : 'Steady') : '—', label: 'Demand trend', icon: 'bi-activity', bg: 'linear-gradient(135deg,#355f8c,#26456a)' },
-                { n: prediction ? `${Math.round(prediction.today)} today` : '—', label: 'Requests today', icon: 'bi-calendar3', bg: 'linear-gradient(135deg,#2f7d4f,#1f5c38)' },
-                { n: prediction ? `${Math.round(prediction.r2 * 100)}%` : '—', label: 'Forecast confidence (R²)', icon: 'bi-sliders', bg: 'linear-gradient(135deg,#8a640e,#6b4d0a)' },
+                { n: prediction ? String(prediction.forecastSum) : '—', label: 'Forecast requests · next 7 days', icon: 'bi-graph-up-arrow', bg: "url('https://images.unsplash.com/photo-1502877338535-766e1452684a?auto=format&fit=crop&w=800&q=80') center/cover no-repeat" },
+                { n: prediction ? (prediction.slope >= 0.02 ? 'Rising' : prediction.slope <= -0.02 ? 'Falling' : 'Steady') : '—', label: 'Demand trend', icon: 'bi-activity', bg: "url('https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=800&q=80') center/cover no-repeat" },
+                { n: prediction ? `${Math.round(prediction.today)} today` : '—', label: 'Requests today', icon: 'bi-calendar3', bg: "url('https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?auto=format&fit=crop&w=800&q=80') center/cover no-repeat" },
+                { n: prediction ? `${Math.round(prediction.r2 * 100)}%` : '—', label: 'Forecast confidence (R²)', icon: 'bi-sliders', bg: "url('https://images.unsplash.com/photo-1494976388531-d1058494cdd8?auto=format&fit=crop&w=800&q=80') center/cover no-repeat" },
               ].map((m) => (
                 <div className="metric-card" key={m.label} style={{ background: m.bg }}>
                   <div className="metric-content">
@@ -577,14 +583,14 @@ useEffect(() => {
         )}
 
         {tab === 'vehicles' && (
-          <div className="dashboard-grid">
-            <div className="panel-card">
+          <div className="d-flex flex-column gap-3">
+            <div className="panel-card compact-vehicle-form">
               <div className="panel-header">
                 <h2>{editingVehicle ? 'Edit vehicle' : 'Add vehicle to hub'}</h2>
               </div>
-              <div className="p-3">
+              <div className="p-2">
                 <form onSubmit={saveVehicle}>
-                  <div className="row g-3">
+                  <div className="row g-2">
                     <div className="col-md-6">
                       <label className="book-label">Name</label>
                       <input className="form-control book-input" placeholder="e.g. Toyota Corolla" value={vehicleForm.name} onChange={(e) => setVehicleForm({ ...vehicleForm, name: e.target.value })} />

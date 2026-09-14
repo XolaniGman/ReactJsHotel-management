@@ -234,10 +234,10 @@ export default function FleetMaintenance() {
 
       <div className="metric-grid mb-4">
         {[
-          { n: countBy('Open') + countBy('InProgress'), label: 'Open work orders', icon: 'bi-wrench-adjustable', bg: 'linear-gradient(135deg,#355f8c,#26456a)' },
-          { n: countBy('AwaitingApproval'), label: 'Awaiting approval', icon: 'bi-cash-stack', bg: 'linear-gradient(135deg,#8a640e,#6b4d0a)' },
-          { n: countBy('AwaitingParts'), label: 'Awaiting parts', icon: 'bi-box-seam', bg: 'linear-gradient(135deg,#5b51a8,#433c7d)' },
-          { n: vehicles.filter((v) => v.status === 'InMaintenance').length, label: 'Units in maintenance', icon: 'bi-tools', bg: 'linear-gradient(135deg,#a33a2d,#7a251b)' },
+          { n: countBy('Open') + countBy('InProgress'), label: 'Open work orders', icon: 'bi-wrench-adjustable', bg: "url('https://images.unsplash.com/photo-1502877338535-766e1452684a?auto=format&fit=crop&w=800&q=80') center/cover no-repeat" },
+          { n: countBy('AwaitingApproval'), label: 'Awaiting approval', icon: 'bi-cash-stack', bg: "url('https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=800&q=80') center/cover no-repeat" },
+          { n: countBy('AwaitingParts'), label: 'Awaiting parts', icon: 'bi-box-seam', bg: "url('https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?auto=format&fit=crop&w=800&q=80') center/cover no-repeat" },
+          { n: vehicles.filter((v) => v.status === 'InMaintenance').length, label: 'Units in maintenance', icon: 'bi-tools', bg: "url('https://images.unsplash.com/photo-1494976388531-d1058494cdd8?auto=format&fit=crop&w=800&q=80') center/cover no-repeat" },
         ].map((m) => (
           <div className="metric-card" key={m.label} style={{ background: m.bg }}>
             <div className="metric-content">

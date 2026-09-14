@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { listUserReservations } from '../services/reservationService';
@@ -24,14 +24,13 @@ const FLEET_MANAGER_PORTAL = [
   { to: '/Fleet/Manager', icon: 'bi-speedometer2', label: 'Overview' },
   { to: '/Fleet/Dashboard', icon: 'bi-kanban', label: 'Fleet Operations' },
   { to: '/Fleet/Vehicles', icon: 'bi-car-front', label: 'Vehicles Hub' },
-  { to: '/Fleet/Rent', icon: 'bi-calendar-plus', label: 'Rental Bookings' },
-  { to: '/Fleet/Service', icon: 'bi-taxi-front', label: 'Shuttle Requests' },
+  { to: '/Fleet/RentalQueue', icon: 'bi-hourglass-split', label: 'Rental Requests Queue' },
+  { to: '/Fleet/ActiveRentals', icon: 'bi-arrow-left-right', label: 'Active Rentals — Check-out / Check-in' },
   { to: '/Fleet/MyTrips', icon: 'bi-signpost-split', label: 'Trip Bookings' },
 ];
 
 const FLEET_MANAGER_SERVICES = [
   { to: '/Fleet/Charges', icon: 'bi-credit-card', label: 'Charges & Payments' },
-  { to: '/Fleet/Incident/Report', icon: 'bi-bug', label: 'Report Incident' },
   { to: '/Fleet/Incidents', icon: 'bi-journal-text', label: 'Incident Register' },
   { to: '/Fleet/Maintenance', icon: 'bi-wrench-adjustable', label: 'Work Orders' },
 ];
@@ -41,11 +40,16 @@ export default function GuestLayout({ children }) {
   const isFleetManager = user?.role === 'fleetmanager';
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
   const [activeRes, setActiveRes] = useState(null);
   const [latestBill, setLatestBill] = useState(null);
   const [diningCount, setDiningCount] = useState(0);
   const [bannerDismissed, setBannerDismissed] = useState(false);
   const [verifySent, setVerifySent] = useState(false);
+  const [chatPos, setChatPos] = useState(null);
+  const [dragging, setDragging] = useState(false);
+  const chatRef = useRef(null);
+  const dragOffset = useRef({ x: 0, y: 0 });
 
   useEffect(() => {
     if (!user?.uid) return;
@@ -75,6 +79,34 @@ export default function GuestLayout({ children }) {
     if (result?.ok) setVerifySent(true);
   };
 
+  const startChatDrag = (e) => {
+    const rect = chatRef.current.getBoundingClientRect();
+    dragOffset.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    setDragging(true);
+  };
+
+  useEffect(() => {
+    if (!dragging) return undefined;
+
+    const onMove = (e) => {
+      const rect = chatRef.current.getBoundingClientRect();
+      const maxX = window.innerWidth - rect.width;
+      const maxY = window.innerHeight - rect.height;
+      const x = Math.min(Math.max(0, e.clientX - dragOffset.current.x), Math.max(0, maxX));
+      const y = Math.min(Math.max(0, e.clientY - dragOffset.current.y), Math.max(0, maxY));
+      setChatPos({ x, y });
+    };
+
+    const onUp = () => setDragging(false);
+
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    };
+  }, [dragging]);
+
   const initials = (user?.name || user?.email || 'G').charAt(0).toUpperCase();
   const roomLabel = isFleetManager
     ? 'Fleet Manager'
@@ -83,13 +115,13 @@ export default function GuestLayout({ children }) {
   const serviceItems = isFleetManager ? FLEET_MANAGER_SERVICES : ELITE_SERVICES;
 
   return (
-    <div className={`palm-shell ${mobileOpen ? 'sidebar-open' : ''}`}>
+    <div className={`palm-shell ${mobileOpen ? 'sidebar-open' : ''} ${collapsed ? 'sidebar-collapsed' : ''}`}>
       <div className="palm-sidebar-overlay" onClick={() => setMobileOpen(false)} />
 
       <aside className="palm-sidebar">
         <Link className="palm-sidebar-brand" to={isFleetManager ? '/Fleet/Manager' : '/Guest/Dashboard'} onClick={() => setMobileOpen(false)}>
           <span className="palm-sidebar-brand-mark">P</span>
-          <span>
+          <span className="palm-sidebar-brand-text">
             <span className="palm-sidebar-brand-name d-block">The Palm</span>
             <span className="palm-sidebar-brand-sub">Resort &amp; Sanctuary</span>
           </span>
@@ -104,9 +136,10 @@ export default function GuestLayout({ children }) {
                 to={item.to}
                 className={({ isActive }) => `palm-nav-link ${isActive ? 'active' : ''}`}
                 onClick={() => setMobileOpen(false)}
+                title={item.label}
               >
                 <i className={`bi ${item.icon}`} />
-                <span>{item.label}</span>
+                <span className="palm-nav-link-text">{item.label}</span>
                 {item.badgeKey && badgeValues[item.badgeKey] > 0 && (
                   <span className="palm-nav-badge">{badgeValues[item.badgeKey]}</span>
                 )}
@@ -124,9 +157,10 @@ export default function GuestLayout({ children }) {
                 to={item.to}
                 className={({ isActive }) => `palm-nav-link ${isActive ? 'active' : ''}`}
                 onClick={() => setMobileOpen(false)}
+                title={item.label}
               >
                 <i className={`bi ${item.icon}`} />
-                <span>{item.label}</span>
+                <span className="palm-nav-link-text">{item.label}</span>
               </NavLink>
             ))}
           </nav>
@@ -134,9 +168,9 @@ export default function GuestLayout({ children }) {
 
         <div className="palm-nav-section" style={{ marginBottom: '1.5rem' }}>
           <nav className="d-flex flex-column gap-1">
-            <button type="button" className="palm-nav-link" onClick={handleLogout}>
+            <button type="button" className="palm-nav-link" onClick={handleLogout} title="Log Out">
               <i className="bi bi-box-arrow-right" />
-              <span>Log Out</span>
+              <span className="palm-nav-link-text">Log Out</span>
             </button>
           </nav>
         </div>
@@ -146,6 +180,14 @@ export default function GuestLayout({ children }) {
         <header className="palm-topbar">
           <button type="button" className="palm-topbar-toggle" aria-label="Toggle menu" onClick={() => setMobileOpen((v) => !v)}>
             <i className="bi bi-list" />
+          </button>
+          <button
+            type="button"
+            className="palm-sidebar-collapse-toggle"
+            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            onClick={() => setCollapsed((c) => !c)}
+          >
+            <i className={`bi ${collapsed ? 'bi-layout-sidebar-inset' : 'bi-layout-sidebar-inset-reverse'}`} />
           </button>
           <div className="palm-search">
             <i className="bi bi-search" />
@@ -197,8 +239,12 @@ export default function GuestLayout({ children }) {
         </footer>
       </div>
 
-      <div className="palm-chat-widget">
-        <div className="palm-chat-header">
+      <div
+        ref={chatRef}
+        className={`palm-chat-widget ${dragging ? 'dragging' : ''}`}
+        style={chatPos ? { left: chatPos.x, top: chatPos.y, bottom: 'auto', right: 'auto' } : undefined}
+      >
+        <div className="palm-chat-header" onPointerDown={startChatDrag}>
           <span className="palm-chat-title">Front Desk Chat</span>
           <span className="palm-chat-status"><span className="dot" />Online</span>
         </div>

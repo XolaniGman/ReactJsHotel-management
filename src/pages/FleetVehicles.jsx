@@ -83,7 +83,7 @@ export default function FleetVehicles() {
         </div>
       </div>
 
-      <div className="palm-card">
+      <div className="palm-card fleet-filter-card">
         <div className="palm-card-header">
           <div>
             <span className="palm-card-title d-block">Find your ride</span>
@@ -104,6 +104,16 @@ export default function FleetVehicles() {
             <Link to="/Fleet/Service" className="palm-btn palm-btn-primary">
               <i className="bi bi-taxi-front" /> Request a shuttle
             </Link>
+            {isFleetManager && (
+              <>
+                <Link to="/Fleet/RentalQueue" className="palm-btn palm-btn-outline">
+                  <i className="bi bi-hourglass-split" /> Rental Requests Queue
+                </Link>
+                <Link to="/Fleet/ActiveRentals" className="palm-btn palm-btn-outline">
+                  <i className="bi bi-arrow-left-right" /> Active Rentals — Check-out / Check-in
+                </Link>
+              </>
+            )}
           </div>
         </div>
         <div className="palm-card-body">

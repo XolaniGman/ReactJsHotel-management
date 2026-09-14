@@ -39,7 +39,9 @@ export default function FleetActiveRentals() {
     );
   }
 
-  const rentalBookings = (bookings || []).filter((b) => ['Confirmed', 'CheckedOut', 'PendingInspection', 'CheckedIn'].includes(b.status));
+  const rentalBookings = (bookings || [])
+    .filter((b) => ['Confirmed', 'CheckedOut', 'PendingInspection', 'CheckedIn'].includes(b.status))
+    .sort((a, b) => (a.confirmedAt || 0) - (b.confirmedAt || 0));
   const visibleRentals = rentalBookings.filter((b) => {
     const q = rentalSearch.trim().toLowerCase();
     if (!q) return true;
@@ -104,10 +106,10 @@ export default function FleetActiveRentals() {
 
         <div className="metric-grid">
           {[
-            { n: byStatus.Confirmed, label: 'Awaiting check-out', icon: 'bi-box-arrow-up-right', bg: 'linear-gradient(135deg,#8a640e,#6b4d0a)' },
-            { n: byStatus.CheckedOut, label: 'On rental', icon: 'bi-car-front', bg: 'linear-gradient(135deg,#355f8c,#26456a)' },
-            { n: byStatus.PendingInspection, label: 'Pending inspection', icon: 'bi-clipboard-check', bg: 'linear-gradient(135deg,#433c7d,#2d2e66)' },
-            { n: byStatus.CheckedIn, label: 'Returned', icon: 'bi-box-arrow-in-down', bg: 'linear-gradient(135deg,#2f7d4f,#1f5c38)' },
+            { n: byStatus.Confirmed, label: 'Awaiting check-out', icon: 'bi-box-arrow-up-right', bg: "url('https://images.unsplash.com/photo-1502877338535-766e1452684a?auto=format&fit=crop&w=800&q=80') center/cover no-repeat" },
+            { n: byStatus.CheckedOut, label: 'On rental', icon: 'bi-car-front', bg: "url('https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=800&q=80') center/cover no-repeat" },
+            { n: byStatus.PendingInspection, label: 'Pending inspection', icon: 'bi-clipboard-check', bg: "url('https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?auto=format&fit=crop&w=800&q=80') center/cover no-repeat" },
+            { n: byStatus.CheckedIn, label: 'Returned', icon: 'bi-box-arrow-in-down', bg: "url('https://images.unsplash.com/photo-1494976388531-d1058494cdd8?auto=format&fit=crop&w=800&q=80') center/cover no-repeat" },
           ].map((m) => (
             <div className="metric-card" key={m.label} style={{ background: m.bg }}>
               <div className="metric-content">
@@ -135,7 +137,7 @@ export default function FleetActiveRentals() {
             </span>
           </div>
           <div className="table-responsive">
-            <table className="task-table">
+            <table className="task-table task-table-spaced">
               <thead>
                 <tr><th>Guest</th><th>Vehicle / unit</th><th>Window</th><th>Status</th><th>Action</th></tr>
               </thead>
@@ -205,9 +207,6 @@ export default function FleetActiveRentals() {
                         {b.status === 'CheckedIn' && (
                           <div className="d-flex flex-column gap-1 align-items-start">
                             <span className="fleet-badge fleet-badge-CheckedIn">Return completed</span>
-                            <Link to={`/Fleet/Incident/Report?type=booking&id=${b.id}`} className="btn btn-sm btn-outline-danger">
-                              <i className="bi bi-bug me-1" />Report incident
-                            </Link>
                           </div>
                         )}
                         </div>
