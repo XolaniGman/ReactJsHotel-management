@@ -58,7 +58,8 @@ export default function DashboardVoiceAssistant() {
       setMessages((prev) => [...prev, { role: 'assistant', text: reply }]);
       speak(reply);
       if (navigateTo) navigate(navigateTo);
-    } catch {
+    } catch (err) {
+      console.error('Dashboard assistant request failed:', err);
       const fallback = "Sorry, I couldn't reach the assistant just now. Please try again in a moment.";
       setMessages((prev) => [...prev, { role: 'assistant', text: fallback }]);
       setError(fallback);

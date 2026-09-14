@@ -170,9 +170,7 @@
   padding: 1rem;
   border-bottom: 1px solid #eee6da;
   vertical-align: middle;
-}
 
-.maint-dash .task-table tr:last-child td {
   border-bottom: 0;
 }
 
