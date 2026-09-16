@@ -8,6 +8,7 @@ import { formatPrice, todayISO, addDaysISO, nightsBetween, formatGuestDate } fro
 import { CAR_RENTAL_ADDONS, ADDITIONAL_DRIVER_FEE, FLEET_BRANCHES } from '../lib/constants';
 import StripeCheckoutModal from '../components/StripeCheckoutModal';
 import DocumentScanner from '../components/DocumentScanner';
+import LicenceBarcodeScanner from '../components/LicenceBarcodeScanner';
 import './guest.css';
 import './rooms.css';
 import './fleet.css';
@@ -34,7 +35,7 @@ export default function FleetRent() {
   const [pendingPayment, setPendingPayment] = useState(null);
   const [scanNote, setScanNote] = useState('');
   const [documentReviewRequired, setDocumentReviewRequired] = useState(false);
-  const [showScanner, setShowScanner] = useState(false);
+  const [scannerMode, setScannerMode] = useState(null); // null | 'ocr' | 'barcode'
   const [additionalDriver, setAdditionalDriver] = useState(false);
   const [driverDob, setDriverDob] = useState('');
   const [pickupBranchId, setPickupBranchId] = useState('main');
@@ -103,7 +104,24 @@ export default function FleetRent() {
     if (mismatched) notes.push('scanned ID number does not match what was entered');
     else if (needsReview) notes.push('Front Desk will verify this before pickup');
     setScanNote(notes.join(' — ') || 'Could not read the document — please type the details manually.');
-    setShowScanner(false);
+    setScannerMode(null);
+  };
+
+  const handleBarcodeResult = (result) => {
+    if (result.candidateNumber && !licenseNumber.trim()) setLicenseNumber(result.candidateNumber);
+
+    const mismatched = result.idNumberMatch === false;
+    setDocumentReviewRequired(mismatched || !result.readable);
+
+    const notes = [];
+    if (!result.readable) {
+      notes.push("barcode payload isn't plain text — try the photo (OCR) scanner or enter details manually");
+    } else if (mismatched) {
+      notes.push('scanned ID number does not match what was entered');
+    } else if (result.candidateNumber) {
+      notes.push('licence number read from barcode');
+    }
+    setScanNote(notes.join(' — '));
   };
 
   const submit = async (e) => {
@@ -321,18 +339,37 @@ export default function FleetRent() {
                   </div>
                   <div className="col-12">
                     <div className="d-flex gap-2 flex-wrap align-items-center">
-                      <button type="button" className="btn-log" style={{ background: '#355f8c', padding: '0.5rem 1rem' }} onClick={() => setShowScanner((s) => !s)}>
-                        <i className={`bi ${showScanner ? 'bi-x-lg' : 'bi-upc-scan'} me-1`} />
-                        {showScanner ? 'Close scanner' : 'Scan licence'}
+                      <button
+                        type="button"
+                        className="btn-log"
+                        style={{ background: '#355f8c', padding: '0.5rem 1rem' }}
+                        onClick={() => setScannerMode((m) => (m === 'ocr' ? null : 'ocr'))}
+                      >
+                        <i className={`bi ${scannerMode === 'ocr' ? 'bi-x-lg' : 'bi-upc-scan'} me-1`} />
+                        {scannerMode === 'ocr' ? 'Close scanner' : 'Scan licence'}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-log"
+                        style={{ background: '#5b51a8', padding: '0.5rem 1rem' }}
+                        onClick={() => setScannerMode((m) => (m === 'barcode' ? null : 'barcode'))}
+                      >
+                        <i className={`bi ${scannerMode === 'barcode' ? 'bi-x-lg' : 'bi-qr-code-scan'} me-1`} />
+                        {scannerMode === 'barcode' ? 'Close scanner' : 'Scan barcode'}
                       </button>
                       {scanNote && <span className="task-sub text-primary">{scanNote}</span>}
                     </div>
                     <div className="text-muted small mt-1">
-                      <i className="bi bi-info-circle me-1" />OCR runs locally in your browser via Tesseract.js — the photo is never uploaded.
+                      <i className="bi bi-info-circle me-1" />Both scanners run locally in your browser — photos and camera frames are never uploaded.
                     </div>
-                    {showScanner && (
+                    {scannerMode === 'ocr' && (
                       <div className="mt-3">
                         <DocumentScanner onResult={handleScanResult} expectedIdNumber={licenseNumber} />
+                      </div>
+                    )}
+                    {scannerMode === 'barcode' && (
+                      <div className="mt-3">
+                        <LicenceBarcodeScanner onResult={handleBarcodeResult} expectedIdNumber={licenseNumber} />
                       </div>
                     )}
                   </div>

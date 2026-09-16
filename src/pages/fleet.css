@@ -983,6 +983,20 @@
   align-self: flex-end; font-size: 0.62rem; font-weight: 600; color: #fff; background: rgba(14, 16, 24, 0.42);
   padding: 0.18rem 0.48rem; border-radius: 6px; letter-spacing: 0.015em; backdrop-filter: blur(4px);
 }
+.carview-badge360 {
+  align-self: flex-end; font-size: 0.62rem; font-weight: 800; color: #ffe6c2; background: rgba(14, 16, 24, 0.5);
+  padding: 0.2rem 0.5rem; border-radius: 6px; letter-spacing: 0.04em; text-transform: uppercase;
+  backdrop-filter: blur(4px);
+}
+.carview.hud-stack .carview-hud, .carview-studio .carview-hud { gap: 0.45rem; }
+.carview-studio .carview-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  pointer-events: none;
+  white-space: nowrap;
+}
 .carview-label {
   margin-top: auto; font-size: 0.68rem; font-weight: 800; color: #fff; background: rgba(14, 16, 24, 0.5);
   padding: 0.22rem 0.56rem; border-radius: 8px; width: fit-content; text-transform: uppercase; letter-spacing: 0.04em;
@@ -1020,6 +1034,62 @@
 .carview-loader-pct { margin-top: 8px; font-size: 0.62rem; font-weight: 700; color: #766e58; }
 .carview-error img { width: 100%; height: 100%; object-fit: cover; border-radius: 16px; }
 .carview-error span { font-size: 0.78rem; color: #766e58; }
+
+/* ---- Gemini 360° turntable strip viewer ---- */
+.ctt-host { position: relative; width: 100%; border-radius: 16px; overflow: hidden; }
+.ctt-host .carview { height: 100%; }
+.ctt .tt { height: 100%; cursor: grab; }
+
+.tt { position: relative; width: 100%; height: 100%; }
+.tt-stage {
+  position: absolute; inset: 0; overflow: hidden; touch-action: none; user-select: none;
+  background:
+    radial-gradient(110% 95% at 50% 0%, rgba(255, 255, 255, 0.72), transparent 58%),
+    radial-gradient(circle at 50% 118%, rgba(47, 125, 79, 0.18), transparent 60%),
+    linear-gradient(180deg, #e8eade 0%, #d2cfc4 100%);
+  border: 1px solid #d5cfca; border-radius: 16px;
+}
+.tt-stage.tt-grabbing { cursor: grabbing; }
+.tt-bg {
+  position: absolute; inset: 0;
+  background-repeat: no-repeat;
+  will-change: background-position;
+}
+
+.tt-hint {
+  position: absolute; top: 10px; right: 12px; pointer-events: none;
+  font-size: 0.62rem; font-weight: 600; color: #fff; background: rgba(14, 16, 24, 0.42);
+  padding: 0.18rem 0.48rem; border-radius: 6px; letter-spacing: 0.015em; backdrop-filter: blur(4px);
+}
+.tt-angle {
+  position: absolute; left: 12px; top: 10px; pointer-events: none;
+  font-size: 0.68rem; font-weight: 700; color: #fff; background: rgba(14, 16, 24, 0.5);
+  padding: 0.24rem 0.56rem; border-radius: 8px; backdrop-filter: blur(4px);
+}
+.tt-angle b { text-transform: uppercase; letter-spacing: 0.04em; }
+.tt-bar {
+  position: absolute; left: 12px; bottom: 12px; z-index: 3;
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap; pointer-events: auto;
+}
+.tt-sides { display: flex; gap: 4px; }
+.tt-side-btn {
+  border: 1px solid rgba(255, 255, 255, 0.55); background: rgba(14, 16, 24, 0.55);
+  color: #fff; border-radius: 8px; font-size: 0.64rem; font-weight: 800;
+  padding: 0.24rem 0.5rem; cursor: pointer; backdrop-filter: blur(4px);
+  transition: background 0.15s ease;
+}
+.tt-side-btn:hover { background: rgba(14, 16, 24, 0.8); }
+.tt-side-btn.active { background: #355f8c; border-color: #355f8c; }
+.tt-slider {
+  position: absolute; left: 50%; bottom: 52px; transform: translateX(-50%);
+  width: min(70%, 280px); z-index: 3; accent-color: #355f8c; margin: 0;
+}
+
+@media (max-width: 560px) {
+  .tt-angle { display: none; }
+  .tt-bar { left: 50%; transform: translateX(-50%); justify-content: center; }
+  .tt-slider { width: 62%; bottom: 48px; }
+}
 
 /* Handover record card */
 .handover-card { border: 1px solid #eee6da; border-radius: 14px; background: #fff; }

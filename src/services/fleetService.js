@@ -88,7 +88,7 @@ const MOCK_FLEET_VEHICLES = [
       capacity: 5, pricePerDay: 490, deposit: 500, fuelType: 'Petrol',
       unitNumber: 'EC-104', plateNumber: 'GH 104 ZA', year: 2023, mileage: 12900,
       nextServiceDate: addDaysISO(todayISO(), 40), status: 'Available',
-      image: mockImg('1562911791-c7a97b729ec5'),
+      image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/08/2020_Suzuki_Swift_Facelift_IMG_1880.jpg/1280px-2020_Suzuki_Swift_Facelift_IMG_1880.jpg',
       description: 'Playful and economical — the ideal companion for exploring the coast.',
       features: ['Bluetooth', 'USB Charging', 'Air Conditioning'],
     },

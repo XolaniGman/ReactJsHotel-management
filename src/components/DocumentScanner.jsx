@@ -390,6 +390,15 @@ export default function DocumentScanner({ onResult, expectedIdNumber = '' }) {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
+  const cardData = (parsed || licenceFields) ? {
+    type: parsed?.documentType || 'Driver’s Licence',
+    name: parsed ? `${parsed.givenNames} ${parsed.surname}`.trim() : '',
+    number: parsed?.documentNumber || licenceFields?.licenseNumber || '',
+    dob: parsed?.dateOfBirth || licenceFields?.dob || '',
+    expiry: parsed?.dateOfExpiry || licenceFields?.licenseExpiry || '',
+    country: parsed?.issuingCountry || parsed?.nationality || '',
+  } : null;
+
   return (
     <div className="docscan-card">
       <div className="docscan-header">
@@ -456,7 +465,36 @@ export default function DocumentScanner({ onResult, expectedIdNumber = '' }) {
 
       {stage === STAGES.DONE && (
         <div className="docscan-stack">
-          {imageSrc && <img src={imageSrc} alt="Scanned document" className="docscan-preview-img" />}
+          {cardData ? (
+            <div className="docscan-vcard">
+              <span className="docscan-vcard-badge">Scanned copy</span>
+              <div className="docscan-vcard-top">
+                {imageSrc && <img src={imageSrc} alt="" className="docscan-vcard-photo" />}
+                <div className="docscan-vcard-heading">
+                  <span className="docscan-vcard-type">{cardData.type}</span>
+                  <span className="docscan-vcard-name">{cardData.name || '—'}</span>
+                  {cardData.country && <span className="docscan-vcard-country">{cardData.country}</span>}
+                </div>
+              </div>
+              <div className="docscan-vcard-rows">
+                <div className="docscan-vcard-row">
+                  <span>No.</span>
+                  <strong>{cardData.number || '—'}</strong>
+                </div>
+                <div className="docscan-vcard-row">
+                  <span>DOB</span>
+                  <strong>{cardData.dob || '—'}</strong>
+                </div>
+                <div className="docscan-vcard-row">
+                  <span>Expiry</span>
+                  <strong>{cardData.expiry || '—'}</strong>
+                </div>
+              </div>
+              <p className="docscan-vcard-footer">Digital copy for verification only — not a valid identification document.</p>
+            </div>
+          ) : (
+            imageSrc && <img src={imageSrc} alt="Scanned document" className="docscan-preview-img" />
+          )}
 
           {parsed ? (
             <div className="docscan-fields">
