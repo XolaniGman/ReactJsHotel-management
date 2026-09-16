@@ -122,7 +122,7 @@ export default function GuestLayout({ children }) {
         <Link className="palm-sidebar-brand" to={isFleetManager ? '/Fleet/Manager' : '/Guest/Dashboard'} onClick={() => setMobileOpen(false)}>
           <span className="palm-sidebar-brand-mark">P</span>
           <span className="palm-sidebar-brand-text">
-            <span className="palm-sidebar-brand-name d-block">The Palm</span>
+            <span className="palm-sidebar-brand-name d-block">Winds Hotel</span>
             <span className="palm-sidebar-brand-sub">Resort &amp; Sanctuary</span>
           </span>
         </Link>
@@ -229,7 +229,7 @@ export default function GuestLayout({ children }) {
         <div className="palm-content">{children}</div>
 
         <footer className="palm-footer">
-          <strong>THE PALM</strong> <span className="sep">·</span> Luxury Hospitality Group &amp; Sanctuary
+          <strong>Winds Hotel</strong> <span className="sep">·</span> Luxury Hospitality Group &amp; Sanctuary
           <span className="sep">·</span> 24-Hour Guest Support · +1 800 555 0142
           <div className="mt-1">
             <a href="#privacy">Guest Privacy</a>

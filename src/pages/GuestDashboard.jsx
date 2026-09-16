@@ -323,7 +323,7 @@ export default function GuestDashboard() {
 
           <div className="palm-card">
             <div className="palm-card-header">
-              <span className="palm-card-title">Today at The Palm</span>
+              <span className="palm-card-title">Today at Winds Hotel</span>
               <span className="palm-weather-chip"><i className="bi bi-brightness-high" />32°C</span>
             </div>
             <div className="palm-card-body">

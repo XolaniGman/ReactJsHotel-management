@@ -25,22 +25,54 @@ const restaurantRef = () =>
 // ---------- Seed / populate ----------
 
 const DEMO_MENU = [
+  // Breakfast (5)
   { name: 'Full Coastal Breakfast', description: 'Eggs, grilled tomato, boerewors, toast and coffee.', category: 'Breakfast', price: 165, prepTime: 20, dietary: [], image: 'https://images.unsplash.com/photo-1525351484163-7529414344d8?auto=format&fit=crop&w=800&q=80' },
   { name: 'Fluffy Buttermilk Pancakes', description: 'Stack of buttermilk pancakes, seasonal fruit and honey.', category: 'Breakfast', price: 95, prepTime: 15, dietary: ['Vegetarian'], image: 'https://images.unsplash.com/photo-1567620905732-2d1ec7ab7445?auto=format&fit=crop&w=800&q=80' },
+  { name: 'Avocado & Poached Egg Toast', description: 'Sourdough toast topped with smashed avocado, poached eggs and chilli flakes.', category: 'Breakfast', price: 110, prepTime: 12, dietary: ['Vegetarian'], image: 'https://images.unsplash.com/photo-1533089860892-a7c6f0a88666?auto=format&fit=crop&w=800&q=80' },
+  { name: 'Yoghurt & Granola Bowl', description: 'Creamy Greek yoghurt layered with house granola, honey and seasonal berries.', category: 'Breakfast', price: 75, prepTime: 8, dietary: ['Vegetarian'], image: 'https://images.unsplash.com/photo-1517673132405-a56a62b18caf?auto=format&fit=crop&w=800&q=80' },
+  { name: 'Eggs Benedict', description: 'Poached eggs and grilled bacon on an English muffin with hollandaise.', category: 'Breakfast', price: 135, prepTime: 18, dietary: [], image: 'https://images.unsplash.com/photo-1608039755401-742074f0548d?auto=format&fit=crop&w=800&q=80' },
+
+  // Starters (5)
   { name: 'Smoked Snoek Pâté', description: 'Creamy smoked snoek pâté with melba toast and caper salad.', category: 'Starters', price: 85, prepTime: 10, dietary: ['Gluten-Free'], image: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=800&q=80' },
+  { name: 'Garlic & Herb Bruschetta', description: 'Toasted ciabatta topped with tomato, basil and garlic olive oil.', category: 'Starters', price: 65, prepTime: 10, dietary: ['Vegetarian', 'Vegan'], image: 'https://images.unsplash.com/photo-1572695157366-5e585ab2b69f?auto=format&fit=crop&w=800&q=80' },
+  { name: 'Roast Tomato & Basil Soup', description: 'Slow-roasted tomatoes blended with basil and a swirl of cream.', category: 'Starters', price: 70, prepTime: 15, dietary: ['Vegetarian'], image: 'https://images.unsplash.com/photo-1547592166-23ac45744acd?auto=format&fit=crop&w=800&q=80' },
+  { name: 'Crispy Salt & Pepper Calamari', description: 'Lightly fried calamari rings with a citrus aioli dip.', category: 'Starters', price: 95, prepTime: 15, dietary: [], image: 'https://images.unsplash.com/photo-1599487488170-d11ec9c172f0?auto=format&fit=crop&w=800&q=80' },
+  { name: 'Cape Cheese & Charcuterie Board', description: 'Local cheeses, cured meats, preserves and artisan crackers.', category: 'Starters', price: 155, prepTime: 10, dietary: [], image: 'https://images.unsplash.com/photo-1452195100486-9cc805987862?auto=format&fit=crop&w=800&q=80' },
+
+  // Light Bites (5)
   { name: 'Halloumi & Avocado Salad', description: 'Grilled halloumi, avocado, rocket and citrus dressing.', category: 'Light Bites', price: 145, prepTime: 12, dietary: ['Vegetarian', 'Gluten-Free'], image: 'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&w=800&q=80' },
   { name: 'Butternut & Chickpea Buddha Bowl', description: 'Roast butternut, chickpeas, quinoa and tahini drizzle.', category: 'Light Bites', price: 135, prepTime: 15, dietary: ['Vegan', 'Gluten-Free'], image: 'https://images.unsplash.com/photo-1540189549336-e6e99c3679fe?auto=format&fit=crop&w=800&q=80' },
   { name: 'Coastal Fish Tacos', description: 'Lightly battered linefish, slaw and chipotle mayo in corn tortillas.', category: 'Light Bites', price: 165, prepTime: 18, dietary: [], image: 'https://images.unsplash.com/photo-1551504734-5ee1c4a1479b?auto=format&fit=crop&w=800&q=80' },
+  { name: 'Roast Vegetable & Feta Sandwich', description: 'Grilled vegetables, feta and rocket on toasted farm bread.', category: 'Light Bites', price: 90, prepTime: 12, dietary: ['Vegetarian'], image: 'https://images.unsplash.com/photo-1553909489-cd47e0ef937f?auto=format&fit=crop&w=800&q=80' },
+  { name: 'Spinach & Feta Quiche', description: 'Buttery pastry filled with spinach, feta and free-range egg custard.', category: 'Light Bites', price: 105, prepTime: 15, dietary: ['Vegetarian'], image: 'https://images.unsplash.com/photo-1526318472351-c75fcf070305?auto=format&fit=crop&w=800&q=80' },
+
+  // Grills & Mains (5)
   { name: 'Cape Malay Chicken Curry', description: 'Slow-cooked chicken curry with sambals and fragrant rice.', category: 'Grills & Mains', price: 175, prepTime: 25, dietary: ['Halal'], image: 'https://images.unsplash.com/photo-1565557623262-b51c2513a641?auto=format&fit=crop&w=800&q=80' },
   { name: 'Grilled Karoo Lamb Chops', description: 'Herb-crusted lamb chops, roast vegetables and jus.', category: 'Grills & Mains', price: 285, prepTime: 30, dietary: ['Gluten-Free'], image: 'https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=800&q=80' },
   { name: 'Cape Malay Bobotie', description: 'Spiced mince baked with a golden egg topping and rice.', category: 'Grills & Mains', price: 165, prepTime: 28, dietary: ['Halal'], image: 'https://images.unsplash.com/photo-1476224203421-9ac39bcb3327?auto=format&fit=crop&w=800&q=80' },
+  { name: 'Grilled Sirloin Steak', description: 'Char-grilled sirloin with roasted vegetables and a red wine jus.', category: 'Grills & Mains', price: 245, prepTime: 25, dietary: ['Gluten-Free'], image: 'https://images.unsplash.com/photo-1546833999-b9f581a1996d?auto=format&fit=crop&w=800&q=80' },
+  { name: 'Herb-Roasted Chicken', description: 'Free-range chicken roasted with garden herbs and pan gravy.', category: 'Grills & Mains', price: 185, prepTime: 30, dietary: ['Gluten-Free'], image: 'https://images.unsplash.com/photo-1598103442097-8b74394b95c6?auto=format&fit=crop&w=800&q=80' },
+
+  // Seafood (5)
   { name: 'Linefish & Chips', description: 'Crispy hake, hand-cut chips, lemon and tartare sauce.', category: 'Seafood', price: 195, prepTime: 25, dietary: ['Halal'], image: 'https://images.unsplash.com/photo-1579584425555-c3ce17fd4351?auto=format&fit=crop&w=800&q=80' },
   { name: 'Grilled Prawn Skewers', description: 'Char-grilled prawns, garlic butter and lemon aioli.', category: 'Seafood', price: 265, prepTime: 25, dietary: ['Gluten-Free'], image: 'https://images.unsplash.com/photo-1559737558-2f5a35f4523b?auto=format&fit=crop&w=800&q=80' },
+  { name: 'Pan-Seared Salmon', description: 'Salmon fillet seared crisp, served with a lemon butter sauce.', category: 'Seafood', price: 235, prepTime: 20, dietary: ['Gluten-Free'], image: 'https://images.unsplash.com/photo-1519708227418-c8fd9a32b7a2?auto=format&fit=crop&w=800&q=80' },
+  { name: 'Seafood Platter for Two', description: 'Prawns, calamari, mussels and linefish with garlic butter.', category: 'Seafood', price: 385, prepTime: 30, dietary: [], image: 'https://images.unsplash.com/photo-1559847844-5315695dadae?auto=format&fit=crop&w=800&q=80' },
+  { name: 'Fresh Sushi Selection', description: "Chef's selection of nigiri and maki rolls with soy and wasabi.", category: 'Seafood', price: 195, prepTime: 20, dietary: [], image: 'https://images.unsplash.com/photo-1553621042-f6e147245754?auto=format&fit=crop&w=800&q=80' },
+
+  // Desserts (5)
   { name: 'Churros with Chocolate', description: 'Cinnamon sugar churros with warm chocolate dip.', category: 'Desserts', price: 75, prepTime: 12, dietary: ['Vegetarian'], image: 'https://images.unsplash.com/photo-1551024506-0bccd828d307?auto=format&fit=crop&w=800&q=80' },
   { name: 'Malva Pudding', description: 'Warm malva pudding, custard and a hint of apricot.', category: 'Desserts', price: 85, prepTime: 15, dietary: ['Vegetarian'], image: 'https://images.unsplash.com/photo-1565958011703-44f9829ba187?auto=format&fit=crop&w=800&q=80' },
+  { name: 'Baked New York Cheesecake', description: 'Creamy baked cheesecake with a berry compote.', category: 'Desserts', price: 80, prepTime: 10, dietary: ['Vegetarian'], image: 'https://images.unsplash.com/photo-1524351199678-941a58a3df50?auto=format&fit=crop&w=800&q=80' },
+  { name: 'Decadent Chocolate Cake', description: 'Rich dark chocolate layer cake with ganache.', category: 'Desserts', price: 85, prepTime: 10, dietary: ['Vegetarian'], image: 'https://images.unsplash.com/photo-1578985545062-69928b1d9587?auto=format&fit=crop&w=800&q=80' },
+  { name: 'Trio of Ice Cream', description: 'Three scoops of house-made ice cream with a wafer.', category: 'Desserts', price: 65, prepTime: 5, dietary: ['Vegetarian', 'Gluten-Free'], image: 'https://images.unsplash.com/photo-1497034825429-c343d7c6a68f?auto=format&fit=crop&w=800&q=80' },
+
+  // Beverages (5)
   { name: 'Artisan Coffee', description: 'Freshly ground single-origin filter coffee.', category: 'Beverages', price: 45, prepTime: 5, dietary: ['Vegan'], image: 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=800&q=80' },
   { name: 'Rooibos Tea', description: 'South African rooibos served hot with honey on the side.', category: 'Beverages', price: 35, prepTime: 5, dietary: ['Vegan', 'Halal'], image: 'https://images.unsplash.com/photo-1544787219-7f47ccb76574?auto=format&fit=crop&w=800&q=80' },
   { name: 'Craft Ginger Beer', description: 'House-made ginger beer over ice with lime.', category: 'Beverages', price: 50, prepTime: 5, dietary: ['Vegan'], image: 'https://images.unsplash.com/photo-1544145945-f90425340c7e?auto=format&fit=crop&w=800&q=80' },
+  { name: 'Signature Coastal Cocktail', description: 'House cocktail with rum, tropical fruit and fresh mint.', category: 'Beverages', price: 95, prepTime: 8, dietary: ['Vegan'], image: 'https://images.unsplash.com/photo-1551538827-9c037cb4f32a?auto=format&fit=crop&w=800&q=80' },
+  { name: 'Fresh Pressed Juice', description: 'Seasonal fruit and vegetable juice, pressed to order.', category: 'Beverages', price: 55, prepTime: 5, dietary: ['Vegan', 'Gluten-Free'], image: 'https://images.unsplash.com/photo-1600271886742-f049cd451bba?auto=format&fit=crop&w=800&q=80' },
 ];
 
 const DEMO_TABLES = [
@@ -62,10 +94,23 @@ const DEMO_CHEFS = [
 ];
 
 export const seedRestaurantData = async () => {
-  for (const m of DEMO_MENU) await createMenuItem(m);
-  for (const t of DEMO_TABLES) await createTable(t);
-  for (const c of DEMO_CHEFS) await createChef(c);
-  return { menuItems: DEMO_MENU.length, tables: DEMO_TABLES.length, chefs: DEMO_CHEFS.length };
+  const [existingTables, existingMenu, existingChefs] = await Promise.all([
+    listTables(),
+    listMenuItems(),
+    listChefs(),
+  ]);
+  const existingNumbers = new Set(existingTables.map((t) => t.number));
+  const existingMenuNames = new Set(existingMenu.map((m) => m.name));
+  const existingChefNames = new Set(existingChefs.map((c) => c.name));
+
+  const tablesToCreate = DEMO_TABLES.filter((t) => !existingNumbers.has(t.number));
+  const menuToCreate = DEMO_MENU.filter((m) => !existingMenuNames.has(m.name));
+  const chefsToCreate = DEMO_CHEFS.filter((c) => !existingChefNames.has(c.name));
+
+  for (const m of menuToCreate) await createMenuItem(m);
+  for (const t of tablesToCreate) await createTable(t);
+  for (const c of chefsToCreate) await createChef(c);
+  return { menuItems: menuToCreate.length, tables: tablesToCreate.length, chefs: chefsToCreate.length };
 };
 
 // ---------- Menu (UC-02) ----------
@@ -114,6 +159,28 @@ export const deleteMenuItem = (id) => deleteDoc(doc(db, menuCol, id));
 export const setMenuItemAvailability = (id, available) =>
   updateDoc(doc(db, menuCol, id), { available });
 
+export const dedupeMenuItems = async () => {
+  const items = await listMenuItems();
+  const byName = new Map();
+  for (const m of items) {
+    const key = (m.name || '').trim().toLowerCase();
+    const group = byName.get(key) || [];
+    group.push(m);
+    byName.set(key, group);
+  }
+
+  let removed = 0;
+  for (const group of byName.values()) {
+    if (group.length <= 1) continue;
+    const [, ...duplicates] = [...group].sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+    for (const dup of duplicates) {
+      await deleteMenuItem(dup.id);
+      removed += 1;
+    }
+  }
+  return { removed, remaining: items.length - removed };
+};
+
 // ---------- Tables (floor plan) ----------
 
 export const listTables = async () => {
@@ -148,6 +215,33 @@ export const updateTable = (id, data) =>
   });
 
 export const deleteTable = (id) => deleteDoc(doc(db, tablesCol, id));
+
+export const dedupeTables = async () => {
+  const tables = await listTables();
+  const byNumber = new Map();
+  for (const t of tables) {
+    const group = byNumber.get(t.number) || [];
+    group.push(t);
+    byNumber.set(t.number, group);
+  }
+
+  const statusPriority = { Occupied: 2, Reserved: 1, Available: 0 };
+  let removed = 0;
+  for (const group of byNumber.values()) {
+    if (group.length <= 1) continue;
+    const ranked = [...group].sort((a, b) => {
+      const statusDiff = (statusPriority[b.status] ?? 0) - (statusPriority[a.status] ?? 0);
+      if (statusDiff !== 0) return statusDiff;
+      return (a.createdAt || 0) - (b.createdAt || 0);
+    });
+    const [, ...duplicates] = ranked;
+    for (const dup of duplicates) {
+      await deleteTable(dup.id);
+      removed += 1;
+    }
+  }
+  return { removed, remaining: tables.length - removed };
+};
 
 export const setTableStatus = async (number, status) => {
   const table = await getTableByNumber(number);

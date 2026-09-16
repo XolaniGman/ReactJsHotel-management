@@ -9,6 +9,18 @@ import './restaurant.css';
 
 const DIETARY_TAGS = ['Vegan', 'Vegetarian', 'Halal', 'Gluten-Free'];
 
+const dedupeByName = (items) => {
+  const seen = new Map();
+  for (const item of items) {
+    const key = (item.name || '').trim().toLowerCase();
+    const existing = seen.get(key);
+    if (!existing || (item.createdAt || 0) < (existing.createdAt || 0)) {
+      seen.set(key, item);
+    }
+  }
+  return [...seen.values()];
+};
+
 export default function RestaurantMenu() {
   const { user } = useAuth();
   const [params] = useSearchParams();
@@ -38,7 +50,7 @@ export default function RestaurantMenu() {
         listTables(),
         user?.uid ? listUserReservations(user.uid) : [],
       ]);
-      setMenu(m);
+      setMenu(dedupeByName(m));
       setTables(t);
       const active = r.find((x) => ['Approved', 'CheckedIn'].includes(x.status));
       setActiveRes(active || null);

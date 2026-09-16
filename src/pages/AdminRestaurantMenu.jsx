@@ -6,6 +6,7 @@ import {
   deleteMenuItem,
   setMenuItemAvailability,
   seedRestaurantData,
+  dedupeMenuItems,
 } from '../services/restaurantService';
 import { formatPrice } from '../lib/utils';
 import './admin.css';
@@ -54,6 +55,15 @@ export default function AdminRestaurantMenu() {
   const load = async () => setMenu(await listMenuItems());
 
   useEffect(() => { load(); }, []);
+
+  const duplicateCount = menu.length - new Set(menu.map((m) => (m.name || '').trim().toLowerCase())).size;
+
+  const removeDuplicates = async () => {
+    if (!window.confirm(`Remove ${duplicateCount} duplicate menu item(s)? The oldest copy of each dish is kept.`)) return;
+    const result = await dedupeMenuItems();
+    setNotice(`Removed ${result.removed} duplicate item(s). ${result.remaining} items remain.`);
+    load();
+  };
 
   const set = (key, value) => setForm((f) => ({ ...f, [key]: value }));
 
@@ -215,6 +225,11 @@ export default function AdminRestaurantMenu() {
           <div className="admin-card">
             <div className="admin-card-header">
               <h2 className="admin-card-title"><i className="bi bi-list-stars me-2" />Catalogue ({menu.length})</h2>
+              {duplicateCount > 0 && (
+                <button type="button" className="btn btn-sm btn-outline-danger" onClick={removeDuplicates}>
+                  <i className="bi bi-eraser-fill me-1" />Remove {duplicateCount} duplicate item{duplicateCount === 1 ? '' : 's'}
+                </button>
+              )}
             </div>
             {grouped.map(({ category, items }) => (
               <div key={category}>

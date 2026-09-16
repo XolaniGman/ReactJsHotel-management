@@ -45,10 +45,11 @@ const findExpiry = (text) => {
   return all.length > 0 ? all[0] : null;
 };
 
-export const scanLicence = async (file) => {
-  const worker = await getWorker();
-  const { data } = await worker.recognize(file);
-  const text = (data.text || '').replace(/[ \t]+/g, ' ').trim();
+// Pure text parser — extracts SA driver's-licence-style fields from OCR text.
+// Kept separate from the OCR call itself so callers that already have OCR'd
+// text (e.g. DocumentScanner) don't need to run Tesseract a second time.
+export const parseLicenceFields = (rawText) => {
+  const text = (rawText || '').replace(/[ \t]+/g, ' ').trim();
   const upper = text.toUpperCase();
 
   let licenseNumber = '';
@@ -77,11 +78,16 @@ export const scanLicence = async (file) => {
     if (mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31) dob = `${year}-${String(mm).padStart(2, '0')}-${String(dd).padStart(2, '0')}`;
   }
 
+  return { text, licenseNumber, licenseExpiry, dob };
+};
+
+export const scanLicence = async (file) => {
+  const worker = await getWorker();
+  const { data } = await worker.recognize(file);
+  const fields = parseLicenceFields(data.text || '');
+
   return {
-    text,
-    licenseNumber,
-    licenseExpiry,
-    dob,
+    ...fields,
     confidence: Math.round(data.confidence || 0),
   };
 };

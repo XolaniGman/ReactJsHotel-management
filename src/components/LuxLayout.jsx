@@ -185,7 +185,7 @@ export default function LuxLayout({ children }) {
   const role = user?.role;
   const isAdminView = role === 'admin' && isAdminAccount(user?.email);
 
-  // Guests and fleet managers share the dedicated "The Palm" shell.
+  // Guests and fleet managers share the dedicated "Winds Hotel" shell.
   if (role === 'guest' || role === 'fleetmanager') {
     return <GuestLayout>{children}</GuestLayout>;
   }

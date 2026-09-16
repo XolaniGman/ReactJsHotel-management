@@ -6,6 +6,7 @@ import {
   reserveTable,
   updateTableReservationStatus,
   deleteTableReservation,
+  dedupeTables,
 } from '../services/restaurantService';
 import { todayISO } from '../lib/utils';
 import './admin.css';
@@ -41,6 +42,15 @@ export default function AdminRestaurantTables() {
   const act = async (fn, message) => {
     await fn();
     setNotice(message);
+    load();
+  };
+
+  const duplicateCount = tables.length - new Set(tables.map((t) => t.number)).size;
+
+  const removeDuplicates = async () => {
+    if (!window.confirm(`Remove ${duplicateCount} duplicate table record(s)? The most relevant copy of each table number is kept.`)) return;
+    const result = await dedupeTables();
+    setNotice(`Removed ${result.removed} duplicate table(s). ${result.remaining} tables remain.`);
     load();
   };
 
@@ -87,6 +97,11 @@ export default function AdminRestaurantTables() {
         <div className="admin-card mb-4">
           <div className="admin-card-header">
             <h2 className="admin-card-title"><i className="bi bi-grid-3x3 me-2" />Floor plan</h2>
+            {duplicateCount > 0 && (
+              <button type="button" className="btn btn-sm btn-outline-danger" onClick={removeDuplicates}>
+                <i className="bi bi-eraser-fill me-1" />Remove {duplicateCount} duplicate table{duplicateCount === 1 ? '' : 's'}
+              </button>
+            )}
           </div>
           <div style={{ padding: '1.25rem' }}>
             <form onSubmit={addTable} className="d-flex flex-wrap gap-2 align-items-end mb-4 p-3" style={{ background: '#fbf4ea', borderRadius: 12 }}>

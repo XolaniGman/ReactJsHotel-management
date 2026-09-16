@@ -10,6 +10,80 @@ import './palm.css';
 const OPEN_TIME = '07:00';
 const CLOSE_TIME = '21:30';
 const STATUS_TONE = { Available: 'avail', Reserved: 'reserved', Occupied: 'occupied' };
+const STATUS_PRIORITY = { Occupied: 2, Reserved: 1, Available: 0 };
+
+const TABLE_PRESENTATIONS = {
+  1: {
+    zone: 'Window Side',
+    note: 'Ideal for couples',
+    description: 'Uninterrupted sunset vistas overlooking the city gardens with gentle candlelight.',
+    tags: ['Panoramic View', 'Romantic'],
+    image: 'https://images.unsplash.com/photo-1552566626-52f8b828add9?auto=format&fit=crop&w=700&q=80',
+  },
+  2: {
+    zone: 'Main Salon',
+    note: 'Banquette A',
+    description: 'Deep forest-green curved banquette with acoustic privacy fabric, near the grand entrance.',
+    tags: ['Quiet Alcove', 'Wine Cellar View'],
+    image: 'https://images.unsplash.com/photo-1544148103-0773bf10d330?auto=format&fit=crop&w=700&q=80',
+  },
+  3: {
+    zone: 'Library Wing',
+    note: 'Next slot: 21:30',
+    description: 'Currently committed for a private tasting menu until late evening service.',
+    tags: [],
+    image: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=700&q=80',
+  },
+  4: {
+    zone: 'Conservatory',
+    note: 'Climate Controlled',
+    description: 'Surrounded by exotic greenery and heated glass domes, an airy garden retreat.',
+    tags: ['Botanical Garden', 'Heated'],
+    image: 'https://images.unsplash.com/photo-1592861956120-e524fc739696?auto=format&fit=crop&w=700&q=80',
+  },
+  5: {
+    zone: 'Culinary Theater',
+    note: 'Tasting Exclusive',
+    description: 'Watch our chefs curate signature fire-roasted dishes live at the counter.',
+    tags: ['Live Cooking', 'Omakase Style'],
+    image: 'https://images.unsplash.com/photo-1466978913421-dad2ebd01d17?auto=format&fit=crop&w=700&q=80',
+  },
+  6: {
+    zone: 'Center Floor',
+    note: 'In Service',
+    description: 'Currently seated for a multi-course pairing service.',
+    tags: [],
+    image: 'https://images.unsplash.com/photo-1517423440428-a5a00ad493e8?auto=format&fit=crop&w=700&q=80',
+  },
+  7: {
+    zone: 'Window Side',
+    note: 'Corner Vantage',
+    description: 'Discreet corner positioning along the glass facade with stunning night views.',
+    tags: ['Corner Privacy', 'Skyline'],
+    image: 'https://images.unsplash.com/photo-1560624052-449f5ddf0c31?auto=format&fit=crop&w=700&q=80',
+  },
+  8: {
+    zone: 'Center Floor',
+    note: 'Under Chandelier',
+    description: 'Spacious round table located beneath a statement chandelier centerpiece.',
+    tags: ['Grand Chandelier', 'Social'],
+    image: 'https://images.unsplash.com/photo-1550966871-3ed3cdb5ed0c?auto=format&fit=crop&w=700&q=80',
+  },
+};
+
+const FALLBACK_TABLE_IMAGES = [
+  'https://images.unsplash.com/photo-1552566626-52f8b828add9?auto=format&fit=crop&w=700&q=80',
+  'https://images.unsplash.com/photo-1544148103-0773bf10d330?auto=format&fit=crop&w=700&q=80',
+  'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=700&q=80',
+];
+
+const getTablePresentation = (t) => TABLE_PRESENTATIONS[t.number] || {
+  zone: t.location || 'Dining Room',
+  note: '',
+  description: `A comfortable table in the ${t.location || 'dining room'}.`,
+  tags: [],
+  image: FALLBACK_TABLE_IMAGES[t.number % FALLBACK_TABLE_IMAGES.length],
+};
 
 const timeOptions = () => {
   const options = [];
@@ -44,7 +118,24 @@ export default function RestaurantReserve() {
     })();
   }, []);
 
-  const sorted = useMemo(() => [...tables].sort((a, b) => a.number - b.number), [tables]);
+  const sorted = useMemo(() => {
+    const byNumber = new Map();
+    for (const t of tables) {
+      const existing = byNumber.get(t.number);
+      if (!existing) {
+        byNumber.set(t.number, t);
+        continue;
+      }
+      const existingRank = STATUS_PRIORITY[existing.status] ?? 0;
+      const candidateRank = STATUS_PRIORITY[t.status] ?? 0;
+      if (candidateRank > existingRank) {
+        byNumber.set(t.number, t);
+      } else if (candidateRank === existingRank && (t.createdAt || 0) < (existing.createdAt || 0)) {
+        byNumber.set(t.number, t);
+      }
+    }
+    return [...byNumber.values()].sort((a, b) => a.number - b.number);
+  }, [tables]);
   const canPick = useMemo(() => (t) => t.status === 'Available' && t.capacity >= partySize, [partySize]);
 
   const submit = async (e) => {
@@ -110,7 +201,7 @@ export default function RestaurantReserve() {
           <p className="text-muted mb-0">Loading tables…</p>
         </div>
       ) : step === 1 ? (
-        <div className="rest-success" style={{ textAlign: 'left' }}>
+        <div className="rest-booking-step">
           <div className="row g-3">
             <div className="col-md-3">
               <label className="book-label fw-bold small text-uppercase">Date</label>
@@ -134,9 +225,12 @@ export default function RestaurantReserve() {
             </div>
           </div>
 
-          <div className="d-flex align-items-center justify-content-between mt-4 mb-3">
-            <h2 className="admin-card-title mb-0"><i className="bi bi-grid me-2" />Choose your table</h2>
-            <span className="small text-muted">Tap an available table</span>
+          <div className="table-floor-header mt-4 mb-3">
+            <div>
+              <h2 className="table-floor-title">Choose your dining table</h2>
+              <p className="table-floor-subtitle">Select any highlighted card below to preview vantage point and finalize reservation.</p>
+            </div>
+            <span className="table-floor-count-pill">Showing {sorted.length} real-time tables for {time}</span>
           </div>
 
           {sorted.length === 0 ? (
@@ -144,29 +238,66 @@ export default function RestaurantReserve() {
               <i className="bi bi-info-circle me-2" />No tables are set up yet. Please check back later.
             </div>
           ) : (
-            <div className="table-floor">
+            <div className="table-photo-grid">
               {sorted.map((t) => {
                 const pickable = canPick(t);
                 const isSelected = selected?.number === t.number;
+                const tooSmall = t.status === 'Available' && !pickable;
+                const info = getTablePresentation(t);
+                const buttonLabel = isSelected
+                  ? 'Selected'
+                  : t.status === 'Occupied'
+                    ? 'Occupied'
+                    : t.status === 'Reserved'
+                      ? `Unavailable at ${time}`
+                      : tooSmall
+                        ? 'Too small for party'
+                        : 'Select table';
+
                 return (
-                  <button
-                    type="button"
+                  <div
                     key={t.id}
-                    className={`table-tile tile-btn ${pickable ? 'tile-selectable' : 'tile-disabled'} ${isSelected ? 'selected' : ''}`}
-                    disabled={!pickable}
-                    onClick={() => setSelected(t)}
+                    className={`table-photo-card ${pickable ? 'is-selectable' : 'is-disabled'} ${isSelected ? 'is-selected' : ''}`}
+                    onClick={() => pickable && setSelected(t)}
                   >
-                    <span className="tile-icon"><i className="bi bi-people" /></span>
-                    <h3 className="tile-number">Table {t.number}</h3>
-                    <div className="tile-meta">Seats {t.capacity} · {t.location}</div>
-                    {t.status !== 'Available' && (
-                      <span className={`tile-status ${STATUS_TONE[t.status] || 'occupied'}`}>{t.status}</span>
-                    )}
-                    {pickable && isSelected && (
-                      <span className="tile-status avail"><i className="bi bi-check-lg" /> Selected</span>
-                    )}
-                    {pickable && !isSelected && <span className="tile-status avail">Available</span>}
-                  </button>
+                    <div className="table-photo-wrap">
+                      <img src={info.image} alt={`Table ${t.number}`} loading="lazy" />
+                      <span className="table-photo-zone">Zone: {info.zone}</span>
+                      {t.status !== 'Available' ? (
+                        <span className={`table-photo-status ${STATUS_TONE[t.status] || 'occupied'}`}>
+                          <i className={`bi ${t.status === 'Reserved' ? 'bi-clock-history' : 'bi-lock-fill'} me-1`} />{t.status}
+                        </span>
+                      ) : isSelected ? (
+                        <span className="table-photo-status selected"><i className="bi bi-check-circle-fill me-1" />Selected</span>
+                      ) : tooSmall ? (
+                        <span className="table-photo-status full"><i className="bi bi-exclamation-circle me-1" />Too small</span>
+                      ) : (
+                        <span className="table-photo-status avail"><i className="bi bi-circle-fill me-1" />Available</span>
+                      )}
+                      <h3 className="table-photo-number">Table {String(t.number).padStart(2, '0')}</h3>
+                    </div>
+
+                    <div className="table-photo-body">
+                      <div className="table-photo-meta">
+                        <span><i className="bi bi-people me-1" />Seats {t.capacity}{tooSmall ? ' (too few)' : ''}</span>
+                        {info.note && <span className="table-photo-note">{info.note}</span>}
+                      </div>
+                      <p className="table-photo-desc">{info.description}</p>
+                      {info.tags.length > 0 && (
+                        <div className="table-photo-tags">
+                          {info.tags.map((tag) => <span key={tag} className="table-photo-tag">{tag}</span>)}
+                        </div>
+                      )}
+                      <button
+                        type="button"
+                        className={`table-select-btn ${isSelected ? 'is-selected' : ''}`}
+                        disabled={!pickable}
+                        onClick={(e) => { e.stopPropagation(); setSelected(t); }}
+                      >
+                        {buttonLabel}
+                      </button>
+                    </div>
+                  </div>
                 );
               })}
             </div>

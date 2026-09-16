@@ -957,6 +957,70 @@
 .car3d-side-btn.active { background: #355f8c; border-color: #355f8c; color: #fff; }
 .car3d-slider { accent-color: #355f8c; }
 
+/* ---- WebGL showcase viewer ---- */
+.carview {
+  position: relative;
+  width: 100%;
+  border-radius: 16px;
+  overflow: hidden;
+  touch-action: none;
+  background:
+    radial-gradient(110% 95% at 50% 0%, rgba(255, 255, 255, 0.72), transparent 58%),
+    radial-gradient(circle at 50% 118%, rgba(47, 125, 79, 0.18), transparent 60%),
+    linear-gradient(180deg, #e8eade 0%, #d2cfc4 100%);
+  border: 1px solid #d5cfca;
+  cursor: grab;
+}
+.carview:active { cursor: grabbing; }
+.carview-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.carview-canvas canvas { display: block; width: 100% !important; height: 100% !important; }
+
+/* HUD overlay */
+.carview-hud {
+  position: absolute; inset: 0; pointer-events: none; padding: 10px 14px; display: flex; flex-direction: column;
+}
+.carview-hint {
+  align-self: flex-end; font-size: 0.62rem; font-weight: 600; color: #fff; background: rgba(14, 16, 24, 0.42);
+  padding: 0.18rem 0.48rem; border-radius: 6px; letter-spacing: 0.015em; backdrop-filter: blur(4px);
+}
+.carview-label {
+  margin-top: auto; font-size: 0.68rem; font-weight: 800; color: #fff; background: rgba(14, 16, 24, 0.5);
+  padding: 0.22rem 0.56rem; border-radius: 8px; width: fit-content; text-transform: uppercase; letter-spacing: 0.04em;
+}
+
+/* Controls tray */
+.carview-controls {
+  position: absolute; left: 10px; bottom: 10px; display: flex; align-items: flex-end; gap: 10px;
+  pointer-events: auto;
+}
+.carview-swatches { display: flex; gap: 7px; }
+.carview-swatch {
+  width: 26px; height: 26px; border-radius: 50%; border: 2.5px solid rgba(255, 255, 255, 0.9);
+  background: var(--swatch); cursor: pointer; box-shadow: 0 0 0 1.5px rgba(15, 16, 24, 0.25); transition: transform 0.15s;
+}
+.carview-swatch:hover { transform: scale(1.12); }
+.carview-swatch.active { box-shadow: 0 0 0 3px #12131a, 0 0 0 5.5px var(--swatch); transform: scale(1.06); }
+.carview-actions { display: flex; gap: 5px; }
+.carview-btn {
+  width: 30px; height: 30px; border-radius: 8px; border: none; cursor: pointer;
+  background: rgba(14, 16, 24, 0.48); color: #fff; font-size: 0.78rem; display: flex; align-items: center; justify-content: center;
+  backdrop-filter: blur(4px); transition: background 0.15s;
+}
+.carview-btn:hover { background: rgba(14, 16, 24, 0.68); }
+.carview-btn.active { background: #355f8c; }
+
+/* Loading & error states */
+.carview-loader, .carview-error {
+  position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: rgba(235, 238, 228, 0.82); backdrop-filter: blur(4px); z-index: 2;
+}
+.carview-loader-text { font-size: 0.72rem; font-weight: 700; color: #5a533f; margin-bottom: 10px; }
+.carview-loader-track { width: 140px; height: 7px; background: #d5cfca; border-radius: 99px; overflow: hidden; }
+.carview-loader-fill { height: 100%; background: linear-gradient(90deg, #4c9e6e, #355f8c); border-radius: 99px; transition: width 0.3s ease; }
+.carview-loader-pct { margin-top: 8px; font-size: 0.62rem; font-weight: 700; color: #766e58; }
+.carview-error img { width: 100%; height: 100%; object-fit: cover; border-radius: 16px; }
+.carview-error span { font-size: 0.78rem; color: #766e58; }
+
 /* Handover record card */
 .handover-card { border: 1px solid #eee6da; border-radius: 14px; background: #fff; }
 .handover-photo-img {

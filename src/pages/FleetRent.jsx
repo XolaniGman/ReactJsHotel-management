@@ -1,13 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getFleetVehicle, computeRentalQuote, createCarBooking, listFleetVehicles, recordBookingPayment } from '../services/fleetService';
 import { listUserReservations } from '../services/reservationService';
-import { scanLicence } from '../services/ocr';
 import { smartMatchVehicles } from '../lib/fleetAlgo';
 import { formatPrice, todayISO, addDaysISO, nightsBetween, formatGuestDate } from '../lib/utils';
 import { CAR_RENTAL_ADDONS, ADDITIONAL_DRIVER_FEE, FLEET_BRANCHES } from '../lib/constants';
 import StripeCheckoutModal from '../components/StripeCheckoutModal';
+import DocumentScanner from '../components/DocumentScanner';
 import './guest.css';
 import './rooms.css';
 import './fleet.css';
@@ -32,14 +32,13 @@ export default function FleetRent() {
   const [success, setSuccess] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [pendingPayment, setPendingPayment] = useState(null);
-  const [scannerBusy, setScannerBusy] = useState(false);
   const [scanNote, setScanNote] = useState('');
   const [documentReviewRequired, setDocumentReviewRequired] = useState(false);
+  const [showScanner, setShowScanner] = useState(false);
   const [additionalDriver, setAdditionalDriver] = useState(false);
   const [driverDob, setDriverDob] = useState('');
   const [pickupBranchId, setPickupBranchId] = useState('main');
   const [returnBranchId, setReturnBranchId] = useState('main');
-  const fileInputRef = useRef(null);
 
   const activeRes = reservations.find((r) => ['Approved', 'CheckedIn'].includes(r.status));
 
@@ -80,28 +79,31 @@ export default function FleetRent() {
   );
   const topPicks = useMemo(() => new Set(rankedFleet.slice(0, 3).map((r) => r.vehicle.id)), [rankedFleet]);
 
-  const onScanFile = async (e) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file) return;
-    setScannerBusy(true);
-    setScanNote('');
-    const result = await scanLicence(file);
-    setScannerBusy(false);
-    if (result?.error || !result?.confidence) {
-      setScanNote('Could not read the licence — please type the details manually.');
-      setDocumentReviewRequired(true);
-      return;
-    }
-    if (result.licenseNumber) setLicenseNumber(result.licenseNumber);
-    if (result.licenseExpiry) setLicenseExpiry(result.licenseExpiry);
-    if (result.dob) setDriverDob(result.dob);
-    const lowConfidence = result.confidence < 0.6;
-    setDocumentReviewRequired(lowConfidence);
-    setScanNote(
-      `Read at ${Math.round(result.confidence * 100)}% confidence${result.licenseExpiry ? '' : ' — enter the expiry date manually'}` +
-        (lowConfidence ? ' — low confidence, Front Desk will verify this before pickup' : ''),
-    );
+  const handleScanResult = (result) => {
+    const licNum = result.parsed?.documentNumber || result.licenceFields?.licenseNumber;
+    const licExp = result.parsed?.dateOfExpiry || result.licenceFields?.licenseExpiry;
+    const dobVal = result.parsed?.dateOfBirth || result.licenceFields?.dob;
+
+    // Don't overwrite an ID number the guest already typed — verify against
+    // it instead (see idNumberMatch below). Only auto-fill when it's empty.
+    if (licNum && !licenseNumber.trim()) setLicenseNumber(licNum);
+    if (licExp) setLicenseExpiry(licExp);
+    if (dobVal) setDriverDob(dobVal);
+
+    const lowConfidence = result.confidence < 60;
+    const flaggedByAuthCheck = result.authenticity?.verdict === 'likely invalid';
+    const nothingReadable = !licNum && !licExp;
+    const mismatched = result.idNumberMatch === false;
+    const needsReview = lowConfidence || flaggedByAuthCheck || nothingReadable || mismatched;
+    setDocumentReviewRequired(needsReview);
+
+    const notes = [];
+    if (result.confidence) notes.push(`Read at ${result.confidence}% confidence`);
+    if (!licExp) notes.push('enter the expiry date manually');
+    if (mismatched) notes.push('scanned ID number does not match what was entered');
+    else if (needsReview) notes.push('Front Desk will verify this before pickup');
+    setScanNote(notes.join(' — ') || 'Could not read the document — please type the details manually.');
+    setShowScanner(false);
   };
 
   const submit = async (e) => {
@@ -319,16 +321,20 @@ export default function FleetRent() {
                   </div>
                   <div className="col-12">
                     <div className="d-flex gap-2 flex-wrap align-items-center">
-                      <button type="button" className="btn-log" style={{ background: '#355f8c', padding: '0.5rem 1rem' }} disabled={scannerBusy} onClick={() => fileInputRef.current?.click()}>
-                        <i className={`bi ${scannerBusy ? 'bi-arrow-repeat spin' : 'bi-upc-scan'} me-1`} />
-                        {scannerBusy ? 'Reading licence…' : 'Scan licence'}
+                      <button type="button" className="btn-log" style={{ background: '#355f8c', padding: '0.5rem 1rem' }} onClick={() => setShowScanner((s) => !s)}>
+                        <i className={`bi ${showScanner ? 'bi-x-lg' : 'bi-upc-scan'} me-1`} />
+                        {showScanner ? 'Close scanner' : 'Scan licence'}
                       </button>
-                      <input ref={fileInputRef} type="file" accept="image/*" className="d-none" onChange={onScanFile} />
                       {scanNote && <span className="task-sub text-primary">{scanNote}</span>}
                     </div>
                     <div className="text-muted small mt-1">
                       <i className="bi bi-info-circle me-1" />OCR runs locally in your browser via Tesseract.js — the photo is never uploaded.
                     </div>
+                    {showScanner && (
+                      <div className="mt-3">
+                        <DocumentScanner onResult={handleScanResult} expectedIdNumber={licenseNumber} />
+                      </div>
+                    )}
                   </div>
                 </div>
                 {reservations.length > 0 && (

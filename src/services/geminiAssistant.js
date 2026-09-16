@@ -19,7 +19,7 @@ export const DASHBOARD_SECTIONS = [
 
 function buildSystemInstruction() {
   const menu = DASHBOARD_SECTIONS.map((s) => `- ${s.label} (${s.path}): ${s.about}`).join('\n');
-  return `You are the voice concierge assistant embedded in the guest dashboard of a hotel called "The Palm".
+  return `You are the voice concierge assistant embedded in the guest dashboard of a hotel called "Winds Hotel".
 You help the signed-in guest understand and navigate the dashboard by voice.
 
 Sections available in this app (label, path, description):

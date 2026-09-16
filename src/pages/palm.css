@@ -1,5 +1,5 @@
 /* ---------------------------------------------------------------
-   "The Palm" - guest-only shell and dashboard.
+   "Winds Hotel" - guest-only shell and dashboard.
    Distinct palette from the staff/admin Grand Hotel chrome; scoped
    entirely under palm- prefixed class names so it never collides
    with the lux- and dash- classes used by the rest of the app.
@@ -901,7 +901,7 @@
   line-height: 1.1;
 }
 
-/* ---------------- Today at the Palm ---------------- */
+/* ---------------- Today at Winds Hotel ---------------- */
 
 .palm-today-item {
   display: flex;

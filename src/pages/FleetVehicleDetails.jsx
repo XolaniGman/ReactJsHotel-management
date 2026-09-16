@@ -5,7 +5,7 @@ import { getFleetVehicle } from '../services/fleetService';
 import { vehicleRateCard, vehicleRatingInfo } from '../lib/fleetAlgo';
 import { formatPrice, todayISO, addDaysISO } from '../lib/utils';
 import { CAR_RENTAL_ADDONS, HOURLY_FUEL_SURCHARGE } from '../lib/constants';
-import CarViewer3D from '../components/CarViewer3D';
+import CarShowcase from '../components/CarShowcase';
 import './guest.css';
 import './rooms.css';
 import './fleet.css';
@@ -128,7 +128,7 @@ export default function FleetVehicleDetails() {
               </div>
             </div>
             <div className="vdet-viewer">
-              <CarViewer3D image={vehicle.image} label={vehicle.name} size={260} />
+              <CarShowcase label={vehicle.name} fallbackImage={vehicle.image} height={420} />
             </div>
           </div>
 
