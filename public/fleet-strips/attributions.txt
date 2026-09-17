@@ -1,0 +1,92 @@
+Fleet turntable photograph attributions
+========================================
+Each vehicle's 360° strip and card photo are derived from freely-licensed
+photographs hosted on Wikimedia Commons (plus one locally-generated Gemini
+composite for EC-103). Strips are built as 4 unique angles + 4 mirrored
+frames at 912px per frame (7296x512 total, 8 frames).
+
+Format: unit | model | source file(s) | photographer | license
+
+ec-101 | VW Polo Vivo 1.4 | File:VW Polo 2014 fvr.jpg | Robert Basic (Flickr) | CC BY-SA 2.0
+       |   https://commons.wikimedia.org/wiki/File:VW_Polo_2014_fvr.jpg
+
+ec-102 | Toyota Starlet 1.2 (Suzuki Baleno twin) | File:Suzuki Baleno 1.5 GL (2022) (52721423637).jpg | Charles (Flickr) | CC BY 2.0
+       |   https://commons.wikimedia.org/wiki/File:Suzuki_Baleno_1.5_GL_(2022)_(52721423637).jpg
+
+ec-103 | Hyundai Grand i10 | turntable: locally generated 3x3 composite (Gemini, no external source) |
+       |   card photo: File:2020 Hyundai Grand i10 (BA) front view (Vietnam; facelift).png | Autovietnam | CC BY 3.0
+       |   https://commons.wikimedia.org/wiki/File:2020_Hyundai_Grand_i10_(BA)_front_view_(Vietnam;_facelift).png
+
+ec-104 | Suzuki Swift 1.2 | File:2020 Suzuki Swift Facelift IMG_1880.jpg | Alexander-93 | CC BY-SA 4.0
+       |   https://commons.wikimedia.org/wiki/File:2020_Suzuki_Swift_Facelift_IMG_1880.jpg
+
+ec-105 | Kia Picanto 1.2 | File:2021 KIA Picanto X-Line S - 998cc 1.0 (65PS) Petrol - Lime Light Metallic - 10-2024, Front.jpg | Harvey Bold | CC0 (public domain)
+       |   https://commons.wikimedia.org/wiki/File:2021_KIA_Picanto_X-Line_S_-_998cc_1.0_(65PS)_Petrol_-_Lime_Light_Metallic_-_10-2024,_Front.jpg
+
+sd-201 | Toyota Corolla Quest | File:2018 Toyota Corolla (ZRE172R) Ascent sedan (2018-11-02) 01.jpg | EurovisionNim | CC BY-SA 4.0
+       |   https://commons.wikimedia.org/wiki/File:2018_Toyota_Corolla_(ZRE172R)_Ascent_sedan_(2018-11-02)_01.jpg
+
+sd-202 | VW Polo Vivo Sedan | File:2015 VW Polo Sedan (1).jpg | Nick.Pr | CC BY-SA 4.0
+       |   https://commons.wikimedia.org/wiki/File:2015_VW_Polo_Sedan_(1).jpg
+
+sd-203 | Hyundai Elantra 2.0 | File:Hyundai Elantra CN7 PE 1.6 Premium HEV Meta Blue Pearl 01.jpg | Ethan Llamas | CC BY-SA 4.0
+       |   https://commons.wikimedia.org/wiki/File:Hyundai_Elantra_CN7_PE_1.6_Premium_HEV_Meta_Blue_Pearl_01.jpg
+
+sd-204 | Honda Civic 1.8 | File:Honda Civic (2021) sedan Sport DSC 7054.jpg | Alexander-93 | CC BY-SA 4.0
+       |   https://commons.wikimedia.org/wiki/File:Honda_Civic_(2021)_sedan_Sport_DSC_7054.jpg
+
+sd-205 | Nissan Sentra 1.8 | File:2021 Nissan Sentra SR in Electric Blue, front left, 2021-10-03.jpg | Elise240SX | CC BY-SA 4.0
+       |   https://commons.wikimedia.org/wiki/File:2021_Nissan_Sentra_SR_in_Electric_Blue,_front_left,_2021-10-03.jpg
+
+uv-301 | Toyota Fortuner 2.8 | File:2023 Toyota Fortuner 2.8 LTD 4x2 in Silver Metallic, front left, 06-27-2024.jpg | Ethan Llamas | CC BY-SA 4.0
+       |   https://commons.wikimedia.org/wiki/File:2023_Toyota_Fortuner_2.8_LTD_4x2_in_Silver_Metallic,_front_left,_06-27-2024.jpg
+
+uv-302 | Hyundai Tucson 2.0 | File:Hyundai Tucson (NX4) 2.0D GLS+ 2022 (1).jpg | Ethan Llamas | CC BY-SA 4.0
+       |   https://commons.wikimedia.org/wiki/File:Hyundai_Tucson_(NX4)_2.0D_GLS%2B_2022_(1).jpg
+
+uv-303 | Ford Everest 2.0 | File:2023 Ford Everest 2.0 Bi-Turbo Titanium+ in Arctic White, front right, 05-11-2024.jpg | Ethan Llamas | CC BY-SA 4.0
+       |   https://commons.wikimedia.org/wiki/File:2023_Ford_Everest_2.0_Bi-Turbo_Titanium%2B_in_Arctic_White,_front_right,_05-11-2024.jpg
+
+uv-304 | VW Tiguan 1.4 | File:2022 Volkswagen Tiguan R-Line TSi S-A 1.5 Front.jpg | Vauxford | CC BY-SA 4.0
+       |   https://commons.wikimedia.org/wiki/File:2022_Volkswagen_Tiguan_R-Line_TSi_S-A_1.5_Front.jpg
+
+uv-305 | Nissan X-Trail 2.5 | File:Nissan X-Trail T32 Facelift Shishi 01 2022-03-12.jpg | JamesYoung8167 | CC BY-SA 4.0
+       |   https://commons.wikimedia.org/wiki/File:Nissan_X-Trail_T32_Facelift_Shishi_01_2022-03-12.jpg
+
+lx-401 | BMW 3 Series 320i | File:BMW G20 320i Black Sapphire Metallic (1).jpg (+2,+3,+4) | Damian B Oh | CC BY-SA 4.0
+       |   https://commons.wikimedia.org/wiki/File:BMW_G20_320i_Black_Sapphire_Metallic_(1).jpg
+
+lx-402 | Mercedes-Benz C-Class | File:MERCEDES-BENZ C-CLASS LWB (W206) China (10).jpg (+11,+13,+14) | Dinkun Chen | CC BY-SA 4.0
+       |   https://commons.wikimedia.org/wiki/File:MERCEDES-BENZ_C-CLASS_LWB_(W206)_China_(10).jpg
+
+lx-403 | Audi A5 Sportback | File:Audi A5 Sportback F5 FL 1X7A7086.jpg + File:AUDI A5 SPORTBACK F5 China (3).jpg (+4) | Alexander-93, Dinkun Chen | CC BY-SA 4.0
+       |   https://commons.wikimedia.org/wiki/File:Audi_A5_Sportback_F5_FL_1X7A7086.jpg
+       |   https://commons.wikimedia.org/wiki/File:AUDI_A5_SPORTBACK_F5_China_(3).jpg
+
+lx-404 | Porsche 911 Carrera | File:Porsche 992 911 Carrera S White (1).jpg (+2,+3,+5) | Damian B Oh | CC BY-SA 4.0
+       |   https://commons.wikimedia.org/wiki/File:Porsche_992_911_Carrera_S_White_(1).jpg
+
+lx-405 | Mercedes-AMG GT | File:Mercedes-AMG C190 GT Sun Yellow (1).jpg (+2,+3,+4) | Damian B Oh | CC BY-SA 4.0
+       |   https://commons.wikimedia.org/wiki/File:Mercedes-AMG_C190_GT_Sun_Yellow_(1).jpg
+
+sh-501 | Mercedes-Benz Vito | File:Mercedes-Benz Vito W447 Facelift Sanming 01 2022-11-14.jpg | JamesYoung8167 | CC BY-SA 4.0
+       |   https://commons.wikimedia.org/wiki/File:Mercedes-Benz_Vito_W447_Facelift_Sanming_01_2022-11-14.jpg
+
+sh-502 | Toyota Quantum 2.8 | File:TOYOTA HIACE COMMUTER (H200) China.jpg | Dinkun Chen | CC BY-SA 4.0
+       |   https://commons.wikimedia.org/wiki/File:TOYOTA_HIACE_COMMUTER_(H200)_China.jpg
+
+sh-503 | Hyundai H-1 | File:Hyundai Grand Starex TQ FL2 Urban Moonlight Cloud 01.jpg | Ethan Llamas | CC BY-SA 4.0
+       |   https://commons.wikimedia.org/wiki/File:Hyundai_Grand_Starex_TQ_FL2_Urban_Moonlight_Cloud_01.jpg
+
+sh-504 | VW Caravelle 2.0 | File:VOLKSWAGEN T6 CARAVELLE China (2).jpg | Dinkun Chen | CC BY-SA 4.0
+       |   https://commons.wikimedia.org/wiki/File:VOLKSWAGEN_T6_CARAVELLE_China_(2).jpg
+
+sh-505 | Mercedes-Benz Sprinter | File:2018 Mercedes-Benz Sprinter 314 CDi 2.1 Front.jpg | Vauxford | CC BY-SA 4.0
+       |   https://commons.wikimedia.org/wiki/File:2018_Mercedes-Benz_Sprinter_314_CDi_2.1_Front.jpg
+
+License links:
+  CC BY-SA 2.0          https://creativecommons.org/licenses/by-sa/2.0
+  CC BY 2.0             https://creativecommons.org/licenses/by/2.0
+  CC BY 3.0             https://creativecommons.org/licenses/by/3.0
+  CC BY-SA 4.0          https://creativecommons.org/licenses/by-sa/4.0
+  CC0                   https://creativecommons.org/publicdomain/zero/1.0/
